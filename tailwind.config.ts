@@ -5,7 +5,15 @@ export default {
   content: ["./src/**/*.{html,js,svelte,ts}"],
 
   theme: {
-    extend: {}
+    extend: {
+      colors: {
+        accent: {
+          DEFAULT: '#ff9f8a',
+          start: '#ffce9d',
+          end: '#ff839b',
+        }
+      }
+    }
   },
 
   plugins: []

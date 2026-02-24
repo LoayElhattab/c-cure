@@ -5,6 +5,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), 'ccure.db')
 
 
 class DatabaseManager:
+
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
         self.init_db()
@@ -13,6 +14,8 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")   # ← WAL is faster for reads
+        conn.execute("PRAGMA synchronous = NORMAL") # ← safe + faster than FULL
         return conn
 
     def init_db(self):
@@ -59,6 +62,18 @@ class DatabaseManager:
                 UNIQUE(project_id, file_path),
                 FOREIGN KEY(project_id) REFERENCES watched_projects(id) ON DELETE CASCADE
             );
+
+            -- ── Indexes (safe to run repeatedly) ──────────────────────────
+            CREATE INDEX IF NOT EXISTS idx_files_analysis_id
+                ON files(analysis_id);
+            CREATE INDEX IF NOT EXISTS idx_functions_file_id
+                ON functions(file_id);
+            CREATE INDEX IF NOT EXISTS idx_functions_verdict
+                ON functions(verdict);
+            CREATE INDEX IF NOT EXISTS idx_functions_file_verdict
+                ON functions(file_id, verdict);
+            CREATE INDEX IF NOT EXISTS idx_file_hashes_project
+                ON file_hashes(project_id);
         """)
         conn.commit()
         conn.close()
@@ -87,7 +102,7 @@ class DatabaseManager:
         rows = conn.execute("""
             SELECT
                 a.id, a.project_name, a.project_path, a.timestamp,
-                COUNT(f.id) AS total_functions,
+                COUNT(f.id)                                                AS total_functions,
                 SUM(CASE WHEN f.verdict = 'vulnerable' THEN 1 ELSE 0 END) AS vuln_count
             FROM analyses a
             LEFT JOIN files fi ON fi.analysis_id = a.id
@@ -110,11 +125,11 @@ class DatabaseManager:
             "SELECT * FROM files WHERE analysis_id = ?", (analysis_id,)
         ).fetchall()
         result = {
-            "id": analysis["id"],
+            "id":           analysis["id"],
             "project_name": analysis["project_name"],
             "project_path": analysis["project_path"],
-            "timestamp": analysis["timestamp"],
-            "files": []
+            "timestamp":    analysis["timestamp"],
+            "files":        []
         }
         for file in files:
             functions = conn.execute(
@@ -149,7 +164,7 @@ class DatabaseManager:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             file_id,
-            fn.get('name'),
+            fn.get('name') or fn.get('function_name'),
             fn.get('code'),
             fn.get('verdict'),
             fn.get('cwe'),
@@ -162,9 +177,21 @@ class DatabaseManager:
         conn.commit()
         conn.close()
 
-    # ── Dashboard ─────────────────────────────────────────
+    # ── Lightweight badge query ───────────────────────────
 
-    def get_dashboard_stats(self) -> dict:
+    def get_vuln_count(self) -> int:
+        """Single-query count — used by the nav badge."""
+        conn = self.get_connection()
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM functions WHERE verdict = 'vulnerable'"
+        ).fetchone()
+        conn.close()
+        return row["n"] if row else 0
+
+    # ── Dashboard (batched — dashboard + trend in one spawn) ──
+
+    def get_dashboard_and_trend(self) -> dict:
+        """Returns both dashboard stats and trend data in one DB connection."""
         conn = self.get_connection()
 
         kpis = conn.execute("""
@@ -200,17 +227,8 @@ class DatabaseManager:
                 SUM(CASE WHEN f.verdict = 'vulnerable' THEN 1 ELSE 0 END) AS vuln_count
             FROM files fi
             JOIN functions f ON f.file_id = fi.id
-            GROUP BY fi.id ORDER BY fi.id DESC LIMIT 10
+            GROUP BY fi.id ORDER BY vuln_count DESC LIMIT 10
         """).fetchall()
-
-        confidence_bins = conn.execute("""
-            SELECT
-                SUM(CASE WHEN confidence < 0.5                       THEN 1 ELSE 0 END) AS bin_0_50,
-                SUM(CASE WHEN confidence >= 0.5 AND confidence < 0.7 THEN 1 ELSE 0 END) AS bin_50_70,
-                SUM(CASE WHEN confidence >= 0.7 AND confidence < 0.9 THEN 1 ELSE 0 END) AS bin_70_90,
-                SUM(CASE WHEN confidence >= 0.9                      THEN 1 ELSE 0 END) AS bin_90_100
-            FROM functions WHERE confidence IS NOT NULL
-        """).fetchone()
 
         recent = conn.execute("""
             SELECT
@@ -223,23 +241,41 @@ class DatabaseManager:
             GROUP BY a.id ORDER BY a.timestamp DESC LIMIT 7
         """).fetchall()
 
+        trend = conn.execute("""
+            SELECT
+                a.timestamp,
+                SUM(CASE WHEN f.verdict = 'vulnerable' THEN 1 ELSE 0 END) AS vuln_count
+            FROM analyses a
+            LEFT JOIN files fi ON fi.analysis_id = a.id
+            LEFT JOIN functions f ON f.file_id = fi.id
+            GROUP BY a.id
+            ORDER BY a.timestamp ASC
+        """).fetchall()
+
         conn.close()
 
         return {
-            "kpis": dict(kpis),
-            "cwe_counts": [dict(r) for r in cwe_counts],
-            "severity_counts": [dict(r) for r in severity_counts],
-            "file_ratios": [
-                {
-                    "label": r["file_path"].replace("\\", "/").split("/")[-1],
-                    "safe":  r["safe_count"],
-                    "vuln":  r["vuln_count"],
-                }
-                for r in file_ratios
-            ],
-            "confidence_bins": dict(confidence_bins) if confidence_bins else {},
-            "recent_analyses": [dict(r) for r in recent],
+            "dashboard": {
+                "kpis": dict(kpis),
+                "cwe_counts":      [dict(r) for r in cwe_counts],
+                "severity_counts": [dict(r) for r in severity_counts],
+                "file_ratios": [
+                    {
+                        "label": r["file_path"].replace("\\", "/").split("/")[-1],
+                        "safe":  r["safe_count"],
+                        "vuln":  r["vuln_count"],
+                    }
+                    for r in file_ratios
+                ],
+                "recent_analyses": [dict(r) for r in recent],
+            },
+            "trend": [dict(r) for r in trend],
         }
+
+    # Keep old method for backwards compat with any existing callers
+    def get_dashboard_stats(self) -> dict:
+        result = self.get_dashboard_and_trend()
+        return result["dashboard"]
 
     def get_trend_data(self) -> list[dict]:
         conn = self.get_connection()

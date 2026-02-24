@@ -1,150 +1,192 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
-  import { FolderOpen, FileCode, ArrowRight } from "lucide-svelte";
-  import { pendingAnalysis } from "$lib/store";
+  import { theme } from "$lib/theme";
+  import { FolderOpen, FileCode } from "lucide-svelte";
+  import { handleFilePick, handleFolderPick, handleAnalyze } from "./logic";
 
   let selectedPath: string | null = null;
-  let selectedName: string = "";
+  let selectedName = "";
   let selectionType: "file" | "folder" | null = null;
   let errorMessage = "";
 
-  async function handleFilePick() {
+  function onFilePicked(path: string, name: string) {
+    selectedPath = path;
+    selectedName = name;
+    selectionType = "file";
     errorMessage = "";
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const result = await open({
-        multiple: false,
-        directory: false,
-        filters: [
-          { name: "C/C++ Files", extensions: ["cpp", "c", "h", "cc", "cxx"] },
-        ],
-      });
-      if (!result) return;
-      selectedPath = result as string;
-      selectedName =
-        selectedPath.replace(/\\/g, "/").split("/").pop() ?? selectedPath;
-      selectionType = "file";
-    } catch (err) {
-      errorMessage = `Could not open file picker: ${err}`;
-    }
+  }
+  function onFolderPicked(path: string, name: string) {
+    selectedPath = path;
+    selectedName = name;
+    selectionType = "folder";
+    errorMessage = "";
+  }
+  function onError(msg: string) {
+    errorMessage = msg;
   }
 
-  async function handleFolderPick() {
-    errorMessage = "";
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const result = await open({ multiple: false, directory: true });
-      if (!result) return;
-      selectedPath = result as string;
-      selectedName =
-        selectedPath.replace(/\\/g, "/").split("/").pop() ?? selectedPath;
-      selectionType = "folder";
-    } catch (err) {
-      errorMessage = `Could not open folder picker: ${err}`;
-    }
+  function hoverIn(e: MouseEvent, type: "file" | "folder") {
+    if (selectionType === type) return;
+    const el = e.currentTarget as HTMLElement;
+    el.style.background =
+      "linear-gradient(135deg, var(--accent-start), var(--accent-end))";
+    el.style.borderColor = "transparent";
+    el.style.color = "#fff";
+    el.style.boxShadow = "0 0 18px var(--accent-glow)";
+    const sub = el.querySelector(".sub-text") as HTMLElement;
+    if (sub) sub.style.color = "rgba(255,255,255,0.7)";
   }
-
-  function handleAnalyze() {
-    if (!selectedPath || !selectionType) return;
-    pendingAnalysis.set({ type: selectionType, path: selectedPath });
-    goto("/analyzing");
+  function hoverOut(e: MouseEvent, type: "file" | "folder") {
+    if (selectionType === type) return;
+    const el = e.currentTarget as HTMLElement;
+    el.style.background = "transparent";
+    el.style.borderColor = "var(--border)";
+    el.style.color = "var(--muted)";
+    el.style.boxShadow = "none";
+    const sub = el.querySelector(".sub-text") as HTMLElement;
+    if (sub) sub.style.color = "var(--subtle)";
   }
 </script>
 
 <div
-  class="min-h-screen bg-gray-100 dark:bg-gray-950 text-gray-900 dark:text-white flex flex-col items-center justify-center px-6"
+  class="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden"
+  style="background:var(--bg)"
 >
-  <div class="mb-10 text-center">
-    <h1
-      class="text-5xl font-bold text-cyan-600 dark:text-cyan-400 tracking-tight"
-    >
-      C-Cure
-    </h1>
-    <p class="text-gray-500 dark:text-gray-400 mt-2 text-lg">
-      AI-Powered C/C++ Vulnerability Detection
-    </p>
-  </div>
+  <!-- Aurora background -->
+  <div class="aurora-bg"></div>
 
-  <div
-    class="w-full max-w-xl bg-white dark:bg-gray-900 rounded-2xl p-8 shadow-xl border border-gray-200 dark:border-gray-800"
-  >
-    <h2 class="text-xl font-semibold mb-6">Select a Target</h2>
+  <div class="relative z-10 w-full max-w-md animate-fade-up">
+    <!-- Big centered logo -->
+    <img
+      src={$theme === "dark" ? "/logo-white.png" : "/logo-black.png"}
+      alt="C-Cure"
+      class="h-30 w-auto mb-12 mx-auto"
+    />
 
-    <!-- Two pick buttons -->
-    <div class="grid grid-cols-2 gap-3 mb-6">
-      <button
-        on:click={handleFilePick}
-        class="flex flex-col items-center justify-center gap-2 p-6 rounded-xl border-2 transition-all duration-200
-          {selectionType === 'file'
-          ? 'border-cyan-500 dark:border-cyan-400 bg-cyan-100 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-400'
-          : 'border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-cyan-500 dark:hover:border-cyan-600 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-gray-100 dark:hover:bg-gray-800'}"
+    <!-- Card -->
+    <div class="card p-6">
+      <p
+        class="text-xs font-semibold uppercase tracking-wider mb-4"
+        style="color:var(--muted)"
       >
-        <FileCode size={28} />
-        <span class="text-sm font-medium">Single File</span>
-        <span class="text-xs text-gray-500 dark:text-gray-400"
-          >.cpp / .c / .h</span
-        >
-      </button>
+        Select Target
+      </p>
 
-      <button
-        on:click={handleFolderPick}
-        class="flex flex-col items-center justify-center gap-2 p-6 rounded-xl border-2 transition-all duration-200
-          {selectionType === 'folder'
-          ? 'border-cyan-500 dark:border-cyan-400 bg-cyan-100 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-400'
-          : 'border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-cyan-500 dark:hover:border-cyan-600 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-gray-100 dark:hover:bg-gray-800'}"
-      >
-        <FolderOpen size={28} />
-        <span class="text-sm font-medium">Project Folder</span>
-        <span class="text-xs text-gray-500 dark:text-gray-400"
-          >Scans all C++ files</span
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <button
+          onclick={() => handleFilePick(onFilePicked, onError)}
+          onmouseenter={(e) => hoverIn(e, "file")}
+          onmouseleave={(e) => hoverOut(e, "file")}
+          class="flex flex-col items-center justify-center gap-2.5 p-5 rounded-xl border-2 transition-all duration-200 cursor-pointer focus:outline-none"
+          style={selectionType === "file"
+            ? "background:linear-gradient(135deg,var(--accent-start),var(--accent-end));border-color:transparent;color:#fff;box-shadow:0 0 18px var(--accent-glow)"
+            : "border-color:var(--border);color:var(--muted)"}
         >
+          <FileCode size={26} />
+          <div class="text-center">
+            <p class="text-xs font-semibold">Single File</p>
+            <p
+              class="sub-text text-xs mt-0.5"
+              style={selectionType === "file"
+                ? "color:rgba(255,255,255,0.7)"
+                : "color:var(--subtle)"}
+            >
+              .cpp / .c / .h
+            </p>
+          </div>
+        </button>
+
+        <button
+          onclick={() => handleFolderPick(onFolderPicked, onError)}
+          onmouseenter={(e) => hoverIn(e, "folder")}
+          onmouseleave={(e) => hoverOut(e, "folder")}
+          class="flex flex-col items-center justify-center gap-2.5 p-5 rounded-xl border-2 transition-all duration-200 cursor-pointer focus:outline-none"
+          style={selectionType === "folder"
+            ? "background:linear-gradient(135deg,var(--accent-start),var(--accent-end));border-color:transparent;color:#fff;box-shadow:0 0 18px var(--accent-glow)"
+            : "border-color:var(--border);color:var(--muted)"}
+        >
+          <FolderOpen size={26} />
+          <div class="text-center">
+            <p class="text-xs font-semibold">Project Folder</p>
+            <p
+              class="sub-text text-xs mt-0.5"
+              style={selectionType === "folder"
+                ? "color:rgba(255,255,255,0.7)"
+                : "color:var(--subtle)"}
+            >
+              Scans recursively
+            </p>
+          </div>
+        </button>
+      </div>
+
+      {#if selectedName}
+        <div
+          class="flex items-center gap-3 rounded-xl px-4 py-3 mb-4 animate-fade-in"
+          style="background:var(--surface-2);border:1px solid var(--border)"
+        >
+          <div class="dot-success"></div>
+          <div class="flex-1 min-w-0">
+            <p
+              class="text-xs font-medium truncate mono"
+              style="color:var(--accent)"
+            >
+              {selectedName}
+            </p>
+            <p class="text-xs truncate mt-0.5 mono" style="color:var(--muted)">
+              {selectedPath}
+            </p>
+          </div>
+        </div>
+      {/if}
+
+      {#if errorMessage}
+        <p class="text-xs mb-4 animate-fade-in" style="color:var(--danger)">
+          {errorMessage}
+        </p>
+      {/if}
+
+      <!-- EXACT UIVerse button from your screenshots -->
+      <button
+        disabled={!selectedPath}
+        onclick={() =>
+          selectedPath &&
+          selectionType &&
+          handleAnalyze(selectedPath, selectionType)}
+        class="animated-button w-full"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="arr-2"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"
+          ></path>
+        </svg>
+        <span class="text">Run Analysis</span>
+        <span class="circle"></span>
+        <svg
+          viewBox="0 0 24 24"
+          class="arr-1"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z"
+          ></path>
+        </svg>
       </button>
     </div>
 
-    <!-- Selected indicator -->
-    {#if selectedName}
-      <div
-        class="flex items-center gap-3 bg-gray-100 dark:bg-gray-800 rounded-xl px-4 py-3 mb-6"
+    <p class="text-center mt-5 text-xs">
+      <a
+        href="/history"
+        class="transition-colors font-medium"
+        style="color: var(--text)"
+        onmouseenter={(e) => (e.currentTarget.style.color = "var(--bg)")}
+        onmouseleave={(e) => (e.currentTarget.style.color = "var(--text)")}
       >
-        {#if selectionType === "file"}
-          <FileCode size={16} color="#22d3ee" />
-        {:else}
-          <FolderOpen size={16} color="#22d3ee" />
-        {/if}
-        <div class="flex-1 min-w-0">
-          <p
-            class="text-cyan-600 dark:text-cyan-400 text-sm font-medium truncate"
-          >
-            {selectedName}
-          </p>
-          <p class="text-gray-500 dark:text-gray-400 text-xs">{selectedPath}</p>
-        </div>
-      </div>
-    {/if}
-
-    {#if errorMessage}
-      <p class="text-red-500 dark:text-red-400 text-sm mb-4">{errorMessage}</p>
-    {/if}
-
-    <!-- Analyze Button -->
-    <button
-      disabled={!selectedPath}
-      on:click={handleAnalyze}
-      class="w-full py-3 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2
-        {selectedPath
-        ? 'bg-cyan-500 hover:bg-cyan-600 dark:hover:bg-cyan-400 text-white dark:text-gray-950 cursor-pointer'
-        : 'bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-600 cursor-not-allowed'}"
-    >
-      Run Analysis
-      <ArrowRight size={15} />
-    </button>
+        View past analyses →
+      </a>
+    </p>
   </div>
-
-  <p class="mt-8 text-gray-500 dark:text-gray-400 text-sm">
-    <a
-      href="/history"
-      class="hover:text-cyan-500 dark:hover:text-cyan-400 transition-colors"
-      >View past analyses →</a
-    >
-  </p>
 </div>

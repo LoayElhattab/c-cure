@@ -209,14 +209,23 @@ def main():
                 if verdict == "vulnerable":
                     cwe = fn.get('cwe', 'Unknown')
                     severity = fn.get('severity', 'Unknown')
-                    conf = fn.get('confidence', 0) * 100
-                    flowables.append(Paragraph(f"CWE: {cwe} | Severity: {severity} | Confidence: {conf:.1f}%", styles['Normal']))
+                    flowables.append(Paragraph(f"CWE: {cwe} | Severity: {severity}", styles['Normal']))
                 
                 flowables.append(Spacer(1, 10))
             flowables.append(Spacer(1, 10))
 
         doc.build(flowables)
         print(json.dumps({"path": pdf_path}))
+
+    elif command == "statistics":
+        # Batched — dashboard + trend in one Python spawn
+        result = db.get_dashboard_and_trend()
+        print(json.dumps(result, indent=2))
+
+    elif command == "vuln_count":
+        # Ultra-lightweight — just a COUNT(*) for the nav badge
+        count = db.get_vuln_count()
+        print(json.dumps({"count": count}))
 
     else:
         print(json.dumps({"error": f"Unknown command: {command}"}))

@@ -1,0 +1,131 @@
+/* ── Background grid ────────────────────────────────── */
+.bg-grid {
+    background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.35;
+}
+
+/* ── Aurora — dark mode ─────────────────────────────── */
+.aurora-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background:
+        radial-gradient(ellipse at 20% 30%, rgba(255, 206, 157, 0.8) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 50%, rgba(255, 131, 155, 0.7) 0%, transparent 70%),
+        radial-gradient(ellipse at 50% 80%, rgba(255, 206, 157, 0.6) 0%, transparent 65%),
+        linear-gradient(135deg, #09090b 0%, #111117 100%);
+    background-blend-mode: overlay, screen, hard-light, normal;
+    overflow: hidden;
+    animation: aurora-drift 25s infinite alternate ease-in-out;
+}
+
+.aurora-bg::before {
+    content: "";
+    position: absolute;
+    width: 200%;
+    height: 200%;
+    top: -50%;
+    left: -50%;
+    background:
+        repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.02) 0px, rgba(255, 255, 255, 0.02) 1px, transparent 1px, transparent 40px),
+        repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.03) 0px, rgba(255, 255, 255, 0.03) 1px, transparent 1px, transparent 60px);
+    animation: grid-shift 20s linear infinite;
+}
+
+.aurora-bg::after {
+    content: "";
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, transparent 70%, rgba(10, 5, 32, 0.9) 100%);
+    animation: aurora-pulse 8s infinite alternate;
+}
+
+/* ── Aurora — light mode override ──────────────────── */
+html.light .aurora-bg {
+    background:
+        radial-gradient(ellipse at 20% 30%, rgba(255, 189, 136, 1) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 50%, rgba(248, 137, 165, 1) 0%, transparent 70%),
+        radial-gradient(ellipse at 50% 80%, rgba(199, 175, 150, 1) 0%, transparent 65%),
+        linear-gradient(135deg, #f4f4f5 0%, #ffffff 100%);
+    /* multiply darkens on white instead of whitening */
+    background-blend-mode: normal, multiply, multiply, normal;
+    animation: aurora-drift-light 25s infinite alternate ease-in-out;
+}
+
+html.light .aurora-bg::before {
+    background:
+        repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.015) 0px, rgba(0, 0, 0, 0.015) 1px, transparent 1px, transparent 40px),
+        repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.02) 0px, rgba(0, 0, 0, 0.02) 1px, transparent 1px, transparent 60px);
+}
+
+html.light .aurora-bg::after {
+    background: radial-gradient(circle at center, transparent 70%, rgba(240, 235, 230, 0.6) 100%);
+}
+
+/* ── Keyframes ──────────────────────────────────────── */
+@keyframes aurora-drift {
+    0% {
+        background-position: 0% 0%, 0% 0%, 0% 0%;
+        filter: hue-rotate(0deg) brightness(1);
+    }
+
+    50% {
+        background-position: -10% -5%, 5% 10%, 0% 15%;
+        filter: hue-rotate(30deg) brightness(1.2);
+    }
+
+    100% {
+        background-position: 5% 10%, -10% -5%, 15% 0%;
+        filter: hue-rotate(60deg) brightness(1);
+    }
+}
+
+@keyframes aurora-drift-light {
+    0% {
+        background-position: 0% 0%, 0% 0%, 0% 0%;
+        filter: hue-rotate(0deg) brightness(1);
+    }
+
+    50% {
+        background-position: -10% -5%, 5% 10%, 0% 15%;
+        filter: hue-rotate(20deg) brightness(0.97);
+    }
+
+    100% {
+        background-position: 5% 10%, -10% -5%, 15% 0%;
+        filter: hue-rotate(40deg) brightness(1);
+    }
+}
+
+@keyframes grid-shift {
+    0% {
+        transform: translate(0, 0);
+    }
+
+    100% {
+        transform: translate(-50%, -50%);
+    }
+}
+
+@keyframes aurora-pulse {
+    0% {
+        opacity: 0.8;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.5;
+        transform: scale(1.05);
+    }
+
+    100% {
+        opacity: 0.8;
+        transform: scale(1);
+    }
+}

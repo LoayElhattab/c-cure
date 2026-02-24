@@ -1,0 +1,121 @@
+/* ── Card ───────────────────────────────────────────── */
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent-start), var(--accent-end), transparent);
+    opacity: 0.35;
+    transition: opacity 0.2s ease;
+}
+
+.card:hover {
+    border-color: var(--subtle);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.10), 0 0 24px rgba(255, 195, 157, 0.10), 0 0 6px rgba(255, 131, 155, 0.06);
+    transform: translateY(-1px);
+}
+
+.card:hover::before {
+    opacity: 0.8;
+}
+
+/* ── Nav link ───────────────────────────────────────── */
+.nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 12px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid transparent;
+    color: var(--muted);
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+    text-decoration: none;
+}
+
+.nav-link:hover {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--border);
+}
+
+.nav-link.active {
+    color: var(--accent);
+    background: var(--accent-dim);
+    border-color: rgba(255, 159, 138, 0.25);
+    box-shadow: 0 1px 10px rgba(255, 159, 138, 0.12);
+}
+
+/* ── Input ──────────────────────────────────────────── */
+.input {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 0 12px;
+    height: 36px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+}
+
+.input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim), 0 0 12px rgba(255, 159, 138, 0.10);
+}
+
+.input::placeholder {
+    color: var(--subtle);
+}
+
+/* ── Table rows ─────────────────────────────────────── */
+.table-row {
+    transition: background 0.15s ease;
+    cursor: default;
+}
+
+.table-row:hover {
+    background: var(--surface-2);
+}
+
+/* ── Gradient utilities ────────────────────────────── */
+.gradient-text {
+    background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.gradient-bg {
+    background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+}
+
+.gradient-border {
+    border: 1px solid transparent;
+    background-clip: padding-box;
+    position: relative;
+}
+
+.gradient-border::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+    z-index: -1;
+    opacity: 0.5;
+}

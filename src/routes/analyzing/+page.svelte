@@ -1,143 +1,181 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { pendingAnalysis } from "$lib/store";
-  import { get } from "svelte/store";
-
-  const steps = [
-    "Reading source file...",
-    "Extracting functions with tree-sitter...",
-    "Running triage model...",
-    "Classifying vulnerabilities...",
-    "Generating report...",
-  ];
+  import { goto } from "$app/navigation";
+  import { ShieldAlert } from "lucide-svelte";
+  import { STEPS, runAnalysis } from "./logic";
 
   let currentStep = 0;
   let progress = 0;
   let errorMessage = "";
+  let showSummary = false;
+  let summaryData: any = null;
 
   function setStep(i: number) {
     currentStep = i;
-    progress = Math.round((i / (steps.length - 1)) * 100);
+    progress = Math.round((i / (STEPS.length - 1)) * 100);
   }
 
-  onMount(async () => {
-    const pending = get(pendingAnalysis);
-    if (!pending) {
-      goto("/");
-      return;
-    }
-
-    try {
-      // Step 0 — Reading source file
-      setStep(0);
-      await tick();
-
-      // Step 1 — Extract functions
-      setStep(1);
-      const extractRaw = await invoke<string>("extract_functions", {
-        filePath: pending.path,
-      });
-      const extracted = JSON.parse(extractRaw);
-      if (extracted.error) {
-        errorMessage = extracted.error;
-        return;
-      }
-      if (extracted.count === 0) {
-        errorMessage = "No functions found in file.";
-        return;
-      }
-
-      // Step 2 — Check API / triage
-      setStep(2);
-      const apiRaw = await invoke<string>("check_api");
-      const apiStatus = JSON.parse(apiRaw);
-      if (!apiStatus.reachable) {
-        errorMessage =
-          "Kaggle API is unreachable. Make sure the notebook is running and the URL is set.";
-        return;
-      }
-
-      // Step 3 — Full analysis (triage + classify)
-      setStep(3);
-      let raw: string;
-      if (pending.type === "file") {
-        raw = await invoke<string>("analyze_file", { filePath: pending.path });
-      } else {
-        raw = await invoke<string>("analyze_folder", {
-          folderPath: pending.path,
-        });
-      }
-      const result = JSON.parse(raw);
-      if (result.error) {
-        errorMessage = result.error;
-        return;
-      }
-
-      // Step 4 — Done
-      setStep(4);
-      pendingAnalysis.set(null);
-      setTimeout(() => goto(`/report/${result.analysis_id}`), 600);
-    } catch (err) {
-      errorMessage = `Unexpected error: ${err}`;
-    }
+  onMount(() => {
+    runAnalysis(
+      setStep,
+      (data) => {
+        summaryData = data;
+        showSummary = true;
+      },
+      (msg) => {
+        errorMessage = msg;
+      },
+      (id) => goto(`/report/${id}`),
+    );
   });
-
-  // needed to let Svelte re-render between steps
-  function tick() {
-    return new Promise((resolve) => setTimeout(resolve, 300));
-  }
 </script>
 
 <div
-  class="min-h-screen bg-gray-100 dark:bg-gray-950 text-gray-900 dark:text-white flex flex-col items-center justify-center px-6"
+  class="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden"
+  style="background:var(--bg)"
 >
-  <h1 class="text-3xl font-bold text-cyan-600 dark:text-cyan-400 mb-2">
-    Analyzing...
-  </h1>
-  <p class="text-gray-500 dark:text-gray-400 mb-10">
-    Please wait while C-Cure scans your code.
-  </p>
-
+  <div class="absolute inset-0 pointer-events-none bg-grid"></div>
   <div
-    class="w-full max-w-md bg-gray-200 dark:bg-gray-800 rounded-full h-2 mb-6"
-  >
-    <div
-      class="bg-cyan-500 dark:bg-cyan-400 h-2 rounded-full transition-all duration-500"
-      style="width: {progress}%"
-    ></div>
-  </div>
+    class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full pointer-events-none"
+    style="background:radial-gradient(circle,var(--accent-glow) 0%,transparent 60%)"
+  ></div>
 
-  <div class="w-full max-w-md space-y-3">
-    {#each steps as step, i}
+  {#if showSummary && summaryData}
+    <!-- Summary splash -->
+    <div class="relative z-10 w-full max-w-sm animate-fade-up text-center">
       <div
-        class="flex items-center gap-3 text-sm
-        {i < currentStep
-          ? 'text-cyan-600 dark:text-cyan-400'
-          : i === currentStep
-            ? ''
-            : 'text-gray-400 dark:text-gray-500'}"
+        class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5 gradient-bg"
+        style="box-shadow:0 0 30px rgba(255,195,157,0.3)"
       >
-        <span class="w-4 text-center shrink-0">
-          {#if i < currentStep}✓{:else if i === currentStep}⟳{:else}○{/if}
-        </span>
-        {step}
+        <ShieldAlert size={28} color="#fff" />
       </div>
-    {/each}
-  </div>
+      <h2 class="text-lg font-bold mb-1" style="color:var(--text)">
+        Analysis Complete
+      </h2>
+      <p class="text-xs mb-7" style="color:var(--muted)">
+        {summaryData.project_name}
+      </p>
 
-  {#if errorMessage}
-    <div
-      class="mt-8 w-full max-w-md bg-red-100 dark:bg-red-950 border border-red-200 dark:border-red-900 rounded-xl p-4 text-sm text-red-600 dark:text-red-300"
-    >
-      <p class="font-semibold mb-1">Analysis failed</p>
-      <p>{errorMessage}</p>
-      <a
-        href="/"
-        class="mt-3 inline-block text-cyan-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300"
-        >← Try again</a
+      <div class="grid grid-cols-3 gap-3 mb-6">
+        {#each [{ label: "Functions", value: summaryData.total_functions ?? 0, color: "var(--accent)" }, { label: "Vulnerable", value: summaryData.vuln_count ?? 0, color: "var(--danger)" }, { label: "Clean", value: (summaryData.total_functions ?? 0) - (summaryData.vuln_count ?? 0), color: "var(--success)" }] as stat, i}
+          <div class="card p-4 animate-fade-up stagger-{i + 1}">
+            <p class="text-2xl font-bold" style="color:{stat.color}">
+              {stat.value}
+            </p>
+            <p class="text-xs mt-1" style="color:var(--muted)">{stat.label}</p>
+          </div>
+        {/each}
+      </div>
+
+      <p class="text-xs mb-2" style="color:var(--subtle)">Opening report...</p>
+      <div
+        class="h-0.5 rounded-full overflow-hidden"
+        style="background:var(--border)"
       >
+        <div
+          class="h-full rounded-full"
+          style="background:linear-gradient(90deg,var(--accent-start),var(--accent-end));animation:progress-fill 2.5s linear forwards"
+        ></div>
+      </div>
+    </div>
+  {:else}
+    <!-- Steps -->
+    <div class="relative z-10 w-full max-w-sm">
+      <div class="text-center mb-10">
+        <h1 class="text-lg font-bold mb-1" style="color:var(--text)">
+          Analyzing
+        </h1>
+        <p class="text-xs" style="color:var(--muted)">
+          Please wait while C-Cure scans your code
+        </p>
+      </div>
+
+      <!-- Progress bar -->
+      <div
+        class="h-px rounded-full mb-8 overflow-hidden"
+        style="background:var(--border)"
+      >
+        <div
+          class="h-full rounded-full transition-all duration-500"
+          style="width:{progress}%;background:linear-gradient(90deg,var(--accent-start),var(--accent-end));box-shadow:0 0 8px var(--accent-glow)"
+        ></div>
+      </div>
+
+      <div class="space-y-5">
+        {#each STEPS as step, i}
+          {@const done = i < currentStep}
+          {@const active = i === currentStep}
+          <div
+            class="flex items-start gap-4 transition-all duration-300"
+            style="opacity:{i > currentStep ? 0.3 : 1}"
+          >
+            <div
+              class="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 transition-all duration-300"
+              style={done
+                ? "background:var(--success-dim);border:1px solid var(--success)"
+                : active
+                  ? "background:var(--accent-dim);border:1px solid var(--accent)"
+                  : "background:var(--surface-2);border:1px solid var(--border)"}
+            >
+              {#if done}
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path
+                    d="M2 5l2.5 2.5L8 3"
+                    stroke="var(--success)"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              {:else if active}
+                <div
+                  class="w-1.5 h-1.5 rounded-full"
+                  style="background:var(--accent);animation:pulse-red 1s infinite"
+                ></div>
+              {/if}
+            </div>
+
+            <div>
+              <p
+                class="text-xs font-medium"
+                style="color:{done
+                  ? 'var(--success)'
+                  : active
+                    ? 'var(--text)'
+                    : 'var(--muted)'}"
+              >
+                {step.label}
+              </p>
+              {#if active}
+                <p
+                  class="text-xs mt-0.5 animate-fade-in"
+                  style="color:var(--muted)"
+                >
+                  {step.detail}
+                </p>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+
+      {#if errorMessage}
+        <div
+          class="mt-8 rounded-xl p-4 animate-fade-up"
+          style="background:var(--danger-dim);border:1px solid rgba(239,68,68,0.25)"
+        >
+          <p class="text-xs font-semibold mb-1" style="color:var(--danger)">
+            Analysis failed
+          </p>
+          <p class="text-xs leading-relaxed" style="color:#fca5a5">
+            {errorMessage}
+          </p>
+          <a
+            href="/"
+            class="text-xs mt-3 inline-block transition-colors"
+            style="color:var(--accent)">← Try again</a
+          >
+        </div>
+      {/if}
     </div>
   {/if}
 </div>

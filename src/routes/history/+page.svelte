@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
-  import { Trash2, X } from "lucide-svelte";
-  import { success, error as errorToast } from "$lib/toast";
+  import { Trash2, Search, X, Plus } from "lucide-svelte";
+  import { loadHistory, deleteAnalysis } from "./logic";
 
   let history: any[] = [];
   let loading = true;
   let deleting: Record<number, boolean> = {};
+  let confirmId: number | null = null; // which row is showing inline confirm
   let searchTerm = "";
 
   $: filteredHistory = history.filter((item) =>
@@ -14,216 +14,230 @@
   );
 
   onMount(async () => {
-    await loadHistory();
+    history = await loadHistory();
+    loading = false;
   });
 
-  async function loadHistory() {
-    loading = true;
-    try {
-      const raw = await invoke<string>("get_history");
-      const data = JSON.parse(raw);
-      if (data.error) {
-        errorToast(data.error);
-      } else {
-        history = data;
-      }
-    } catch (err) {
-      errorToast(`Failed to load history: ${err}`);
-    }
-    loading = false;
+  function requestDelete(id: number) {
+    confirmId = id; // show inline confirm for this row
   }
 
-  async function handleDelete(id: number, name: string) {
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  function cancelDelete() {
+    confirmId = null;
+  }
+
+  async function confirmDelete(id: number) {
     deleting[id] = true;
     deleting = deleting;
-    try {
-      await invoke("delete_analysis", { analysisId: id });
-      history = history.filter((h) => h.id !== id);
-      success(`"${name}" deleted.`);
-    } catch (err) {
-      errorToast(`Failed to delete: ${err}`);
-    }
+    confirmId = null;
+    const deleted = await deleteAnalysis(id);
+    if (deleted) history = history.filter((h) => h.id !== id);
     deleting[id] = false;
     deleting = deleting;
   }
 </script>
 
 <div
-  class="min-h-screen bg-gray-100 dark:bg-gray-950 text-gray-900 dark:text-white px-6 py-10"
+  class="min-h-screen px-6 py-8 animate-fade-up"
+  style="background:var(--bg);color:var(--text)"
 >
-  <div class="max-w-4xl mx-auto">
-    <div class="flex items-center justify-between mb-8">
+  <div class="max-w-6xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-3xl font-bold text-cyan-600 dark:text-cyan-400">
-          Analysis History
-        </h1>
-        <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">
+        <h1 class="text-lg font-semibold">Analysis History</h1>
+        <p class="text-xs mt-0.5" style="color:var(--muted)">
           All past scans stored locally
         </p>
       </div>
-      <a
-        href="/"
-        class="bg-cyan-500 hover:bg-cyan-600 dark:hover:bg-cyan-400 text-gray-900 dark:text-gray-950 font-semibold px-5 py-2 rounded-xl text-sm transition-colors"
-      >
-        + New Analysis
-      </a>
+      <a href="/" class="btn-primary"><Plus size={12} />New Analysis</a>
     </div>
 
     {#if !loading && history.length > 0}
       <div
-        class="mb-6 flex items-center bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-2"
+        class="flex items-center gap-3 rounded-xl px-4 py-2.5 mb-4"
+        style="background:var(--surface);border:1px solid var(--border)"
       >
+        <Search size={13} color="var(--muted)" />
         <input
           type="text"
           bind:value={searchTerm}
-          placeholder="Search by project name..."
-          class="flex-1 bg-transparent border-none outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+          placeholder="Search analyses..."
+          class="flex-1 bg-transparent text-xs outline-none"
+          style="color:var(--text)"
         />
-        {#if searchTerm.length > 0}
+        {#if searchTerm}
           <button
-            on:click={() => (searchTerm = "")}
-            class="ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-            title="Clear search"
+            onclick={() => (searchTerm = "")}
+            class="transition-colors"
+            style="color:var(--muted)"
           >
-            <X size={16} />
+            <X size={13} />
           </button>
         {/if}
       </div>
     {/if}
 
     {#if loading}
-      <div
-        class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden"
-      >
-        <table class="w-full text-sm">
-          <thead
-            class="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase"
-          >
-            <tr>
-              <th class="text-left px-6 py-3">Project</th>
-              <th class="text-left px-6 py-3">Date</th>
-              <th class="text-left px-6 py-3">Functions</th>
-              <th class="text-left px-6 py-3">Vulnerable</th>
-              <th class="px-6 py-3"></th>
+      <div class="card overflow-hidden">
+        <table class="w-full">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border)">
+              {#each ["Project", "Date", "Functions", "Vulnerable", ""] as h}
+                <th
+                  class="text-left px-5 py-3 text-xs uppercase tracking-wider"
+                  style="color:var(--muted)">{h}</th
+                >
+              {/each}
             </tr>
           </thead>
           <tbody>
-            {#each Array(4) as _}
-              <tr class="border-b border-gray-200 dark:border-gray-800">
-                <td class="px-6 py-4">
-                  <div
-                    class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 animate-pulse"
-                  ></div>
-                </td>
-                <td class="px-6 py-4">
-                  <div
-                    class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 animate-pulse"
-                  ></div>
-                </td>
-                <td class="px-6 py-4">
-                  <div
-                    class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4 animate-pulse"
-                  ></div>
-                </td>
-                <td class="px-6 py-4">
-                  <div
-                    class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 animate-pulse"
-                  ></div>
-                </td>
-                <td class="px-6 py-4">
-                  <div class="flex justify-end gap-3">
-                    <div
-                      class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16 animate-pulse"
-                    ></div>
-                    <div
-                      class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-4 animate-pulse"
-                    ></div>
-                  </div>
-                </td>
+            {#each Array(4) as _, i}
+              <tr
+                style="border-bottom:1px solid var(--border)"
+                class="animate-fade-up stagger-{i + 1}"
+              >
+                <td class="px-5 py-3.5"
+                  ><div class="skeleton h-3 w-32"></div></td
+                >
+                <td class="px-5 py-3.5"
+                  ><div class="skeleton h-3 w-24"></div></td
+                >
+                <td class="px-5 py-3.5"><div class="skeleton h-3 w-8"></div></td
+                >
+                <td class="px-5 py-3.5"
+                  ><div class="skeleton h-3 w-16"></div></td
+                >
+                <td class="px-5 py-3.5"
+                  ><div class="skeleton h-3 w-12 ml-auto"></div></td
+                >
               </tr>
             {/each}
           </tbody>
         </table>
       </div>
     {:else if history.length === 0}
-      <div class="text-center mt-20 text-gray-500 dark:text-gray-400">
-        <p class="text-4xl mb-4">📭</p>
-        <p>No analyses yet. Upload a file to get started.</p>
+      <div class="text-center mt-24 animate-fade-up">
+        <p class="text-3xl mb-3">📭</p>
+        <p class="text-sm" style="color:var(--muted)">No analyses yet.</p>
         <a
           href="/"
-          class="mt-4 inline-block text-cyan-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300 text-sm"
-          >← Go to Upload</a
+          class="text-xs mt-3 inline-block"
+          style="color:var(--accent)">← Go to Upload</a
         >
       </div>
     {:else if filteredHistory.length === 0}
-      <div class="text-center mt-20 text-gray-500 dark:text-gray-400">
-        <p class="text-4xl mb-4">🔍</p>
-        <p>No matching analyses found.</p>
+      <div class="text-center mt-24 animate-fade-up">
+        <p class="text-sm" style="color:var(--muted)">
+          No results for "{searchTerm}"
+        </p>
         <button
-          on:click={() => (searchTerm = "")}
-          class="mt-4 inline-block text-cyan-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300 text-sm"
+          onclick={() => (searchTerm = "")}
+          class="text-xs mt-2 block mx-auto"
+          style="color:var(--accent)"
         >
-          Clear filter
+          Clear search
         </button>
       </div>
     {:else}
-      <div
-        class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden"
-      >
-        <table class="w-full text-sm">
-          <thead
-            class="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase"
-          >
-            <tr>
-              <th class="text-left px-6 py-3">Project</th>
-              <th class="text-left px-6 py-3">Date</th>
-              <th class="text-left px-6 py-3">Functions</th>
-              <th class="text-left px-6 py-3">Vulnerable</th>
-              <th class="px-6 py-3"></th>
+      <div class="card overflow-hidden animate-fade-up">
+        <table class="w-full">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border)">
+              {#each ["Project", "Date", "Functions", "Vulnerable", ""] as h}
+                <th
+                  class="text-left px-5 py-3 text-xs uppercase tracking-wider"
+                  style="color:var(--muted)">{h}</th
+                >
+              {/each}
             </tr>
           </thead>
           <tbody>
             {#each filteredHistory as item}
-              <tr
-                class="border-b border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <td class="px-6 py-4 font-mono">{item.project_name}</td>
-                <td class="px-6 py-4 text-gray-500 dark:text-gray-400"
-                  >{item.timestamp}</td
-                >
-                <td class="px-6 py-4 text-gray-700 dark:text-gray-300"
-                  >{item.total_functions ?? 0}</td
-                >
-                <td class="px-6 py-4">
-                  <span
-                    class="{(item.vuln_count ?? 0) > 0
-                      ? 'text-red-500 dark:text-red-400'
-                      : 'text-green-500 dark:text-green-400'} font-semibold"
+              <tr style="border-bottom:1px solid var(--border)">
+                {#if confirmId === item.id}
+                  <!-- Inline confirmation row -->
+                  <td colspan="5" class="px-5 py-3">
+                    <div class="flex items-center justify-between">
+                      <p class="text-xs" style="color:var(--text)">
+                        Delete
+                        <span class="font-semibold mono"
+                          >{item.project_name}</span
+                        >? This cannot be undone.
+                      </p>
+                      <div class="flex items-center gap-2">
+                        <button
+                          onclick={() => cancelDelete()}
+                          class="text-xs px-3 py-1.5 rounded-lg transition-colors"
+                          style="color:var(--muted);border:1px solid var(--border)"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onclick={() => confirmDelete(item.id)}
+                          class="text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                          style="background:var(--danger);color:#fff;border:1px solid var(--danger)"
+                          disabled={deleting[item.id]}
+                        >
+                          {deleting[item.id] ? "Deleting…" : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                {:else}
+                  <!-- Normal row -->
+                  <td class="px-5 py-3.5 text-xs font-medium mono"
+                    >{item.project_name}</td
                   >
-                    {(item.vuln_count ?? 0) > 0
-                      ? `${item.vuln_count} found`
-                      : "Clean"}
-                  </span>
-                </td>
-                <td class="px-6 py-4">
-                  <div class="flex items-center justify-end gap-3">
-                    <a
-                      href="/report/{item.id}"
-                      class="text-cyan-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300 transition-colors"
+                  <td class="px-5 py-3.5 text-xs" style="color:var(--muted)"
+                    >{item.timestamp}</td
+                  >
+                  <td class="px-5 py-3.5 text-xs" style="color:var(--muted)"
+                    >{item.total_functions ?? 0}</td
+                  >
+                  <td class="px-5 py-3.5">
+                    <span
+                      class="text-xs font-semibold"
+                      style="color:{(item.vuln_count ?? 0) > 0
+                        ? 'var(--danger)'
+                        : 'var(--success)'}"
                     >
-                      View →
-                    </a>
-                    <button
-                      on:click={() => handleDelete(item.id, item.project_name)}
-                      disabled={deleting[item.id]}
-                      class="text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
-                      title="Delete analysis"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
+                      {(item.vuln_count ?? 0) > 0
+                        ? `${item.vuln_count} found`
+                        : "Clean"}
+                    </span>
+                  </td>
+                  <td class="px-5 py-3.5">
+                    <div class="flex items-center justify-end gap-3">
+                      <a
+                        href="/report/{item.id}"
+                        class="text-xs transition-colors"
+                        style="color:var(--accent)"
+                        onmouseenter={(e) =>
+                          ((e.currentTarget as HTMLElement).style.opacity =
+                            "0.7")}
+                        onmouseleave={(e) =>
+                          ((e.currentTarget as HTMLElement).style.opacity =
+                            "1")}
+                      >
+                        View →
+                      </a>
+                      <button
+                        onclick={() => requestDelete(item.id)}
+                        disabled={deleting[item.id]}
+                        class="transition-colors disabled:opacity-40"
+                        style="color:var(--subtle)"
+                        onmouseenter={(e) =>
+                          ((e.currentTarget as HTMLElement).style.color =
+                            "var(--danger)")}
+                        onmouseleave={(e) =>
+                          ((e.currentTarget as HTMLElement).style.color =
+                            "var(--subtle)")}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </td>
+                {/if}
               </tr>
             {/each}
           </tbody>

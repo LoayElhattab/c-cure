@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-// Find the backend directory relative to the app
 fn backend_path() -> PathBuf {
     let exe = std::env::current_exe().unwrap();
     let mut path = exe.parent().unwrap().to_path_buf();
@@ -19,7 +18,6 @@ fn backend_path() -> PathBuf {
 
 fn run_python(args: Vec<&str>) -> Result<String, String> {
     let backend = backend_path();
-
     let output = Command::new("python")
         .args(&args)
         .current_dir(&backend)
@@ -62,6 +60,18 @@ fn get_dashboard() -> Result<String, String> {
 #[tauri::command]
 fn get_trend_data() -> Result<String, String> {
     run_python(vec!["main.py", "get_trend_data"])
+}
+
+/// Replaces get_dashboard + get_trend_data — one Python spawn instead of two
+#[tauri::command]
+fn get_statistics() -> Result<String, String> {
+    run_python(vec!["main.py", "statistics"])
+}
+
+/// Lightweight badge query — single COUNT(*), no JOINs
+#[tauri::command]
+fn get_vuln_count() -> Result<String, String> {
+    run_python(vec!["main.py", "vuln_count"])
 }
 
 #[tauri::command]
@@ -141,6 +151,8 @@ pub fn run() {
             get_report,
             get_dashboard,
             get_trend_data,
+            get_statistics,
+            get_vuln_count,
             extract_functions,
             check_api,
             monitor_register,
