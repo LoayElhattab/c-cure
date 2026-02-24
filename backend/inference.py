@@ -73,6 +73,15 @@ def analyze_function(code: str) -> dict:
 
         # Vulnerable: output is a list like ["CWE-476"]
         cwe = output[0] if isinstance(output, list) else output
+        if isinstance(cwe, str) and cwe.lower() in ("code is safe", "safe","SAFE"):
+            return {
+                "verdict": "safe",
+                "cwe": "safe",
+                "cwe_name": "safe",
+                "severity": "safe",
+                "confidence": confidence if confidence is not None else 1.0,
+                "family": "safe",
+            }
         cwe_meta = CWE_INFO.get(cwe, {"name": "Unknown", "severity": "Unknown"})
         return {
             "verdict": "vulnerable",
