@@ -65,15 +65,20 @@ def extract_name(node, source: bytes) -> str | None:
 
 
 if __name__ == '__main__':
-    # Quick test — pass a .cpp file as argument
     if len(sys.argv) < 2:
         print("Usage: python parser.py <file.cpp>")
         sys.exit(1)
 
     results = extract_functions(sys.argv[1])
-    print(f"Found {len(results)} functions:\n")
-    for fn in results:
-        print(f"  [{fn['start_line']}-{fn['end_line']}] {fn['name']}")
-        print(f"  {'-'*40}")
-        print(f"  {fn['code'][:100].strip()}...")
-        print()
+    output_path = sys.argv[1].replace('.cpp', '_functions.txt')
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        for fn in results:
+            f.write(f"{'='*60}\n")
+            f.write(f"Function : {fn['name']}\n")
+            f.write(f"Lines    : {fn['start_line']} - {fn['end_line']}\n")
+            f.write(f"{'='*60}\n")
+            f.write(fn['code'])
+            f.write('\n\n')
+
+    print(f"Saved {len(results)} functions → {output_path}")
