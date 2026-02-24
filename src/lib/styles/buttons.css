@@ -1,0 +1,166 @@
+/* ── Buttons ────────────────────────────────────────── */
+.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 14px;
+    height: 32px;
+    background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.btn-primary:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 0 20px rgba(255, 131, 155, 0.35);
+}
+
+.btn-primary:active {
+    transform: scale(0.97);
+}
+
+.btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    height: 32px;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.btn-ghost:hover {
+    border-color: var(--subtle);
+    color: var(--text);
+    background: var(--surface-2);
+    box-shadow: 0 0 12px rgba(255, 195, 157, 0.06);
+}
+
+.btn-ghost:active {
+    transform: scale(0.97);
+}
+
+/* Exact UIVerse button from your screenshots */
+.animated-button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 16px 36px;
+    border: 1px solid var(--accent);
+    font-size: 15px;
+    background: transparent;
+    border-radius: 9999px;
+    font-weight: 600;
+    color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent);
+    cursor: pointer;
+    overflow: hidden;
+    transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+    width: 100%;
+}
+
+.animated-button svg {
+    position: absolute;
+    width: 24px;
+    fill: var(--accent);
+    z-index: 9;
+    transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.animated-button .arr-1 {
+    right: 16px;
+}
+
+.animated-button .arr-2 {
+    left: -25%;
+}
+
+.animated-button .circle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+    border-radius: 50%;
+    opacity: 0;
+    transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.animated-button .text {
+    position: relative;
+    z-index: 1;
+    transform: translateX(-12px);
+    transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.animated-button:hover {
+    box-shadow: 0 0 0 12px transparent;
+    color: #212121;
+    border-radius: 9999px;
+    border-color: transparent;
+}
+
+.animated-button:hover .arr-1 {
+    right: -25%;
+}
+
+.animated-button:hover .arr-2 {
+    left: 16px;
+}
+
+.animated-button:hover .text {
+    transform: translateX(12px);
+}
+
+.animated-button:hover svg {
+    fill: #212121;
+}
+
+.animated-button:hover .circle {
+    width: 600px;
+    height: 600px;
+    opacity: 1;
+}
+
+.animated-button:active {
+    scale: 0.95;
+    box-shadow: 0 0 0 4px var(--accent);
+}
+
+/* Disabled state */
+.animated-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    border-color: var(--border);
+    box-shadow: 0 0 0 2px var(--border);
+    color: var(--muted);
+}
+
+.animated-button:disabled .text,
+.animated-button:disabled svg {
+    color: var(--muted) !important;
+    fill: var(--muted) !important;
+}
+
+/* Light mode hover - keep text white for good contrast */
+html.light .animated-button:not(:disabled):hover {
+    color: #ffffff;
+}
+
+html.light .animated-button:not(:disabled):hover svg {
+    fill: #ffffff;
+}

@@ -2,16 +2,8 @@ import os
 import hashlib
 import sys
 import json
-from database import (
-    init_monitor_tables,
-    add_watched_project,
-    get_watched_projects,
-    save_file_hashes,
-    get_file_hashes,
-    remove_watched_project,
-)
+from database import db
 
-init_monitor_tables()
 
 CPP_EXTENSIONS = ('.cpp', '.c', '.h', '.cc', '.cxx')
 
@@ -24,10 +16,10 @@ def hash_file(file_path: str) -> str:
 
 
 def scan_folder(folder_path: str) -> dict:
-    """Hash all C++ files in a folder. Returns {file_path: hash}"""
     hashes = {}
     for root, dirs, files in os.walk(folder_path):
-        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('build', 'cmake', 'node_modules')]
+        dirs[:] = [d for d in dirs if not d.startswith('.')
+                   and d not in ('build', 'cmake', 'node_modules')]
         for file in files:
             if file.endswith(CPP_EXTENSIONS):
                 full_path = os.path.join(root, file)
@@ -41,76 +33,65 @@ def scan_folder(folder_path: str) -> dict:
 def register_project(folder_path: str) -> dict:
     if not os.path.exists(folder_path):
         return {"error": f"Folder not found: {folder_path}"}
-    name = os.path.basename(folder_path.rstrip('/\\'))
-    result = add_watched_project(name, folder_path)
+    name   = os.path.basename(folder_path.rstrip('/\\'))
+    result = db.add_watched_project(name, folder_path)
     if "error" in result:
         return result
     hashes = scan_folder(folder_path)
     if not hashes:
         return {"error": "No C++ files found in folder."}
-    save_file_hashes(result["id"], hashes)
-    return {
-        "id": result["id"],
-        "name": name,
-        "folder_path": folder_path,
-        "files_tracked": len(hashes),
-    }
+    db.save_file_hashes(result["id"], hashes)
+    return {"id": result["id"], "name": name, "folder_path": folder_path, "files_tracked": len(hashes)}
 
 
 def check_changes(project_id: int) -> dict:
-    projects = get_watched_projects()
-    project = next((p for p in projects if p["id"] == project_id), None)
+    projects = db.get_watched_projects()
+    project  = next((p for p in projects if p["id"] == project_id), None)
     if not project:
         return {"error": "Watched project not found."}
-
-    stored = get_file_hashes(project_id)
+    stored  = db.get_file_hashes(project_id)
     current = scan_folder(project["folder_path"])
-
     changed, added, deleted = [], [], []
-
-    for path, hash in current.items():
+    for path, h in current.items():
         if path not in stored:
             added.append(path)
-        elif stored[path] != hash:
+        elif stored[path] != h:
             changed.append(path)
-
     for path in stored:
         if path not in current:
             deleted.append(path)
-
     return {
-        "project_id":   project_id,
-        "project_name": project["name"],
-        "folder_path":  project["folder_path"],
-        "changed":      changed,
-        "added":        added,
-        "deleted":      deleted,
+        "project_id":    project_id,
+        "project_name":  project["name"],
+        "folder_path":   project["folder_path"],
+        "changed":       changed,
+        "added":         added,
+        "deleted":       deleted,
         "total_changes": len(changed) + len(added),
     }
 
 
 def refresh_hashes(project_id: int) -> dict:
-    projects = get_watched_projects()
-    project = next((p for p in projects if p["id"] == project_id), None)
+    projects = db.get_watched_projects()
+    project  = next((p for p in projects if p["id"] == project_id), None)
     if not project:
         return {"error": "Watched project not found."}
     hashes = scan_folder(project["folder_path"])
-    save_file_hashes(project_id, hashes)
+    db.save_file_hashes(project_id, hashes)
     return {"refreshed": True, "files_tracked": len(hashes)}
 
 
 def unregister_project(project_id: int) -> dict:
-    remove_watched_project(project_id)
+    db.remove_watched_project(project_id)
     return {"removed": True}
 
 
 if __name__ == "__main__":
     command = sys.argv[1] if len(sys.argv) > 1 else ""
-
     if command == "register":
         print(json.dumps(register_project(sys.argv[2])))
     elif command == "list":
-        print(json.dumps(get_watched_projects()))
+        print(json.dumps(db.get_watched_projects()))
     elif command == "check":
         print(json.dumps(check_changes(int(sys.argv[2]))))
     elif command == "refresh":

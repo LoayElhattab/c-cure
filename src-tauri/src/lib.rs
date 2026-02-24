@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-// Find the backend directory relative to the app
 fn backend_path() -> PathBuf {
     let exe = std::env::current_exe().unwrap();
     let mut path = exe.parent().unwrap().to_path_buf();
@@ -19,7 +18,6 @@ fn backend_path() -> PathBuf {
 
 fn run_python(args: Vec<&str>) -> Result<String, String> {
     let backend = backend_path();
-
     let output = Command::new("python")
         .args(&args)
         .current_dir(&backend)
@@ -60,6 +58,23 @@ fn get_dashboard() -> Result<String, String> {
 }
 
 #[tauri::command]
+fn get_trend_data() -> Result<String, String> {
+    run_python(vec!["main.py", "get_trend_data"])
+}
+
+/// Replaces get_dashboard + get_trend_data — one Python spawn instead of two
+#[tauri::command]
+fn get_statistics() -> Result<String, String> {
+    run_python(vec!["main.py", "statistics"])
+}
+
+/// Lightweight badge query — single COUNT(*), no JOINs
+#[tauri::command]
+fn get_vuln_count() -> Result<String, String> {
+    run_python(vec!["main.py", "vuln_count"])
+}
+
+#[tauri::command]
 fn extract_functions(file_path: String) -> Result<String, String> {
     run_python(vec!["main.py", "extract_functions", &file_path])
 }
@@ -97,6 +112,32 @@ fn monitor_remove(project_id: i32) -> Result<String, String> {
     run_python(vec!["monitor.py", "remove", &id])
 }
 
+#[tauri::command]
+fn delete_analysis(analysis_id: i32) -> Result<String, String> {
+    let id = analysis_id.to_string();
+    run_python(vec!["main.py", "delete_analysis", &id])
+}
+
+#[tauri::command]
+fn get_settings() -> Result<String, String> {
+    run_python(vec!["main.py", "get_settings"])
+}
+
+#[tauri::command]
+fn save_settings(kaggle_url: String) -> Result<String, String> {
+    run_python(vec!["main.py", "save_settings", &kaggle_url])
+}
+
+#[tauri::command]
+fn generate_pdf(analysis_id: u32) -> Result<String, String> {
+    run_python(vec!["main.py", "generate_pdf", &analysis_id.to_string()])
+}
+
+#[tauri::command]
+fn open_path(path: String) -> Result<(), String> {
+    open::that(&path).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -109,13 +150,21 @@ pub fn run() {
             get_history,
             get_report,
             get_dashboard,
+            get_trend_data,
+            get_statistics,
+            get_vuln_count,
             extract_functions,
             check_api,
             monitor_register,
             monitor_list,
             monitor_check,
             monitor_refresh,
-            monitor_remove
+            monitor_remove,
+            delete_analysis,
+            get_settings,
+            save_settings,
+            generate_pdf,
+            open_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application")
