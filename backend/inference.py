@@ -56,9 +56,6 @@ def analyze_function(code: str) -> dict:
         response.raise_for_status()
         data = response.json()
 
-        # Debug print (helpful during testing)
-        print(f"[DEBUG] ML API response: {data}")
-
         result = data.get("result", {})
         output = result.get("output") if isinstance(result, dict) else result
         confidence = result.get("confidence") if isinstance(result, dict) else data.get("confidence")
