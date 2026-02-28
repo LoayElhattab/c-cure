@@ -2,17 +2,28 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn backend_path() -> PathBuf {
+    // In production: backend/ sits next to the .exe
     let exe = std::env::current_exe().unwrap();
-    let mut path = exe.parent().unwrap().to_path_buf();
-    for _ in 0..5 {
-        if path.join("backend").exists() {
-            return path.join("backend");
+    let exe_dir = exe.parent().unwrap();
+    let prod_path = exe_dir.join("backend");
+    if prod_path.exists() {
+        return prod_path;
+    }
+
+    // In dev: walk up from exe to find backend/ in the project root
+    let mut path = exe_dir.to_path_buf();
+    for _ in 0..8 {
+        let candidate = path.join("backend");
+        if candidate.exists() {
+            return candidate;
         }
         match path.parent() {
             Some(p) => path = p.to_path_buf(),
             None => break,
         }
     }
+
+    // Last resort fallback
     std::env::current_dir().unwrap().join("backend")
 }
 
