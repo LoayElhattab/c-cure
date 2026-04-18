@@ -2,10 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { success, error as errorToast } from "$lib/toast";
 
 export async function loadHistory(): Promise<any[]> {
-    const raw = await invoke<string>("get_history");
-    const data = JSON.parse(raw);
-    if (data.error) { errorToast(data.error); return []; }
-    return data;
+    try {
+        return await invoke<any[]>("get_history");
+    } catch (err) {
+        errorToast(err as string);
+        return [];
+    }
 }
 
 export async function deleteAnalysis(id: number): Promise<boolean> {

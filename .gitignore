@@ -16,11 +16,6 @@ src-tauri/target/
 node_modules/
 .svelte-kit/
 
-# Python
-backend/__pycache__/
-backend/*.pyc
-backend/ccure.db
-
 # Environment / secrets
 .env
 .env.*
