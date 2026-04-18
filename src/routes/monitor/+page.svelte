@@ -23,8 +23,7 @@
   async function loadProjects() {
     loading = true;
     try {
-      const raw = await invoke<string>("monitor_list");
-      projects = JSON.parse(raw);
+      projects = await invoke<any[]>("monitor_list");
     } catch (err) {
       error = `Failed to load projects: ${err}`;
     }
@@ -36,10 +35,9 @@
       const { open } = await import("@tauri-apps/plugin-dialog");
       const folder = await open({ directory: true, multiple: false });
       if (!folder) return;
-      const raw = await invoke<string>("monitor_register", {
+      const result = await invoke<any>("monitor_register", {
         folderPath: folder as string,
       });
-      const result = JSON.parse(raw);
       if (result.error) {
         error = result.error;
         return;
@@ -54,8 +52,7 @@
     checking[projectId] = true;
     checking = checking;
     try {
-      const raw = await invoke<string>("monitor_check", { projectId });
-      checkResults[projectId] = JSON.parse(raw);
+      checkResults[projectId] = await invoke<any>("monitor_check", { projectId });
       checkResults = checkResults;
     } catch (err) {
       error = `Failed to check changes: ${err}`;
@@ -68,7 +65,7 @@
     refreshing[projectId] = true;
     refreshing = refreshing;
     try {
-      await invoke<string>("monitor_refresh", { projectId });
+      await invoke<any>("monitor_refresh", { projectId });
       delete checkResults[projectId];
       checkResults = checkResults;
     } catch (err) {
@@ -80,7 +77,7 @@
 
   async function handleRemove(projectId: number) {
     try {
-      await invoke<string>("monitor_remove", { projectId });
+      await invoke<any>("monitor_remove", { projectId });
       delete checkResults[projectId];
       await loadProjects();
     } catch (err) {

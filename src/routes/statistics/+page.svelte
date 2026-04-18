@@ -21,7 +21,7 @@
 
   function animateCountUp(targets: any, duration = 1200) {
     const start = performance.now();
-    const keys = Object.keys(targets);
+    const keys = Object.keys(targets) as (keyof typeof displayKpis)[];
     function frame(now: number) {
       const t = Math.min((now - start) / duration, 1);
       const ease = 1 - Math.pow(1 - t, 4);
@@ -68,10 +68,9 @@
         .slice(0, 10);
     } else {
       try {
-        const raw = await invoke<string>("get_report", {
+        const report = await invoke<any>("get_report", {
           analysisId: selection,
         });
-        const report = JSON.parse(raw);
         selectedFileRatios = (report.files ?? [])
           .map((f: any) => {
             const vuln = f.functions.filter(
@@ -97,8 +96,7 @@
   onMount(async () => {
     try {
       // ONE spawn instead of two — get_statistics returns dashboard + trend together
-      const raw = await invoke<string>("get_statistics");
-      const data = JSON.parse(raw);
+      const data = await invoke<any>("get_statistics");
 
       if (data.error) {
         error = data.error;

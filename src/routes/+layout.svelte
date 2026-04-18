@@ -1,18 +1,15 @@
 <script>
   import "../app.css";
-  import { onMount } from "svelte";
   import { page } from "$app/stores";
-  import { Upload, BarChart3, Clock, Eye, Settings } from "lucide-svelte";
+  import { Upload, BarChart3, Clock, Settings } from "lucide-svelte";
   import { toasts } from "$lib/toast";
   import { theme } from "$lib/theme";
+
   const navLinks = [
     { href: "/", label: "Upload", icon: Upload },
     { href: "/statistics", label: "Statistics", icon: BarChart3 },
     { href: "/history", label: "History", icon: Clock },
-    { href: "/monitor", label: "Monitor", icon: Eye },
   ];
-
-  onMount(() => {});
 </script>
 
 <div

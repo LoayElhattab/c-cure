@@ -119,7 +119,9 @@
                     About
                 </p>
                 <p class="text-xs" style="color:var(--subtle)">
-                    C-Cure · v1.0.0 · Stage 2 Demo · Graduation Project 2026
+                    C-Cure · v1.0.0 · Demo · FCIS Graduation Project 2026
+                    <br />
+                    Under supervision of Dr. Alshaimaa Abo-Alian & T.A. Alaa Prince
                 </p>
             </div>
         {/if}
