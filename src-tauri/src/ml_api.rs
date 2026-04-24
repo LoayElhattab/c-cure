@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-use crate::error::AppError;
 use crate::db::FunctionData;
+use crate::error::AppError;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AnalysisResult {
@@ -34,10 +34,10 @@ pub fn load_kaggle_url(app_data_dir: &Path) -> String {
         if let Some(parent) = exe.parent() {
             let old_config = parent.join("backend/config.json");
             if let Ok(content) = fs::read_to_string(&old_config) {
-                 if let Ok(config) = serde_json::from_str::<Config>(&content) {
+                if let Ok(config) = serde_json::from_str::<Config>(&content) {
                     let _ = fs::write(&config_path, &content);
                     return config.kaggle_url;
-                 }
+                }
             }
         }
     }
@@ -46,7 +46,10 @@ pub fn load_kaggle_url(app_data_dir: &Path) -> String {
 
 pub fn save_kaggle_url(app_data_dir: &Path, url: &str) -> std::io::Result<()> {
     let config_path = app_data_dir.join("config.json");
-    let content = serde_json::to_string(&Config { kaggle_url: url.to_string() }).unwrap();
+    let content = serde_json::to_string(&Config {
+        kaggle_url: url.to_string(),
+    })
+    .unwrap();
     if !app_data_dir.exists() {
         fs::create_dir_all(app_data_dir)?;
     }
@@ -57,17 +60,29 @@ pub async fn check_api_health(client: &Client, url: &str) -> bool {
     if std::env::var("MOCK_API").unwrap_or_default() == "true" {
         return true;
     }
-    if url.is_empty() { return false; }
-    if let Ok(resp) = client.get(url).timeout(std::time::Duration::from_secs(5)).send().await {
+    if url.is_empty() {
+        return false;
+    }
+    if let Ok(resp) = client
+        .get(url)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await
+    {
         resp.status().is_success()
     } else {
         false
     }
 }
 
-pub async fn analyze_function(client: &Client, url: &str, code: &str) -> Result<FunctionData, AppError> {
+pub async fn analyze_function(
+    client: &Client,
+    url: &str,
+    code: &str,
+) -> Result<FunctionData, AppError> {
     if std::env::var("MOCK_API").unwrap_or_default() == "true" {
-        let is_vulnerable = code.contains("strcpy") || code.contains("malloc") || code.contains("gets");
+        let is_vulnerable =
+            code.contains("strcpy") || code.contains("malloc") || code.contains("gets");
         if is_vulnerable {
             let (cwe_name, severity) = get_cwe_info("CWE-787");
             return Ok(FunctionData {
@@ -99,32 +114,41 @@ pub async fn analyze_function(client: &Client, url: &str, code: &str) -> Result<
     }
 
     if url.is_empty() {
-        return Err(AppError::Custom("Kaggle API URL not configured (check settings)".into()));
+        return Err(AppError::Custom(
+            "Kaggle API URL not configured (check settings)".into(),
+        ));
     }
 
     let body = serde_json::json!({ "code": code });
-    let resp = client.post(format!("{}/predict", url))
+    let resp = client
+        .post(format!("{}/predict", url))
         .json(&body)
         .timeout(std::time::Duration::from_secs(60))
         .send()
         .await?;
-        
+
     if !resp.status().is_success() {
-        return Err(AppError::Custom(format!("API returned error: {}", resp.status())));
+        return Err(AppError::Custom(format!(
+            "API returned error: {}",
+            resp.status()
+        )));
     }
-    
+
     let json: serde_json::Value = resp.json().await?;
     let mut confidence = 0.0;
-    
+
     let mut output_str = String::new();
-    
+
     if let Some(result) = json.get("result") {
         if let Some(conf) = result.get("confidence") {
-            confidence = conf.get("value").and_then(|v| v.as_f64()).unwrap_or_else(|| conf.as_f64().unwrap_or(0.0));
+            confidence = conf
+                .get("value")
+                .and_then(|v| v.as_f64())
+                .unwrap_or_else(|| conf.as_f64().unwrap_or(0.0));
         } else if let Some(conf) = json.get("confidence") {
             confidence = conf.as_f64().unwrap_or(0.0);
         }
-        
+
         if let Some(out) = result.get("output") {
             if let Some(s) = out.as_str() {
                 output_str = s.to_string();
@@ -148,7 +172,7 @@ pub async fn analyze_function(client: &Client, url: &str, code: &str) -> Result<
             }
         }
     }
-    
+
     if output_str.to_lowercase() == "code is safe" || output_str.to_lowercase() == "safe" {
         return Ok(FunctionData {
             id: None,
@@ -163,14 +187,18 @@ pub async fn analyze_function(client: &Client, url: &str, code: &str) -> Result<
             end_line: None,
         });
     }
-    
+
     let cwe_info = get_cwe_info(&output_str);
-    
+
     Ok(FunctionData {
         id: None,
         function_name: "".into(),
         code: "".into(),
-        verdict: if output_str.is_empty() { "safe".into() } else { "vulnerable".into() },
+        verdict: if output_str.is_empty() {
+            "safe".into()
+        } else {
+            "vulnerable".into()
+        },
         cwe: Some(output_str),
         cwe_name: cwe_info.0,
         severity: cwe_info.1,
@@ -184,7 +212,10 @@ fn get_cwe_info(cwe: &str) -> (Option<String>, Option<String>) {
     match cwe {
         "CWE-125" => (Some("Out-of-bounds Read".into()), Some("High".into())),
         "CWE-787" => (Some("Out-of-bounds Write".into()), Some("Critical".into())),
-        "CWE-190" => (Some("Integer Overflow or Wraparound".into()), Some("High".into())),
+        "CWE-190" => (
+            Some("Integer Overflow or Wraparound".into()),
+            Some("High".into()),
+        ),
         "CWE-369" => (Some("Divide By Zero".into()), Some("Medium".into())),
         "CWE-415" => (Some("Double Free".into()), Some("High".into())),
         "CWE-476" => (Some("NULL Pointer Dereference".into()), Some("High".into())),
@@ -210,19 +241,27 @@ mod tests {
     async fn test_mock_api_behavior() {
         std::env::set_var("MOCK_API", "true");
         let client = Client::new();
-        
+
         // Test vulnerable code
-        let res = analyze_function(&client, "", "void dangerous() { char buf[10]; strcpy(buf, input); }").await.unwrap();
+        let res = analyze_function(
+            &client,
+            "",
+            "void dangerous() { char buf[10]; strcpy(buf, input); }",
+        )
+        .await
+        .unwrap();
         assert_eq!(res.verdict, "vulnerable");
         assert_eq!(res.cwe, Some("CWE-787".into()));
-        
+
         // Test safe code
-        let res = analyze_function(&client, "", "void safe() { int x = 5; }").await.unwrap();
+        let res = analyze_function(&client, "", "void safe() { int x = 5; }")
+            .await
+            .unwrap();
         assert_eq!(res.verdict, "safe");
-        
+
         let health = check_api_health(&client, "").await;
         assert!(health);
-        
+
         std::env::remove_var("MOCK_API");
     }
 }

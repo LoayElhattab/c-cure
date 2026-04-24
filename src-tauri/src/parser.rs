@@ -105,7 +105,9 @@ pub fn clean_code(code: &str) -> String {
 pub fn extract_functions(file_path: &str) -> std::io::Result<Vec<ExtractedFunction>> {
     let source = fs::read(file_path)?;
     let mut parser = tree_sitter::Parser::new();
-    parser.set_language(&tree_sitter_cpp::language()).expect("Error loading C++ grammar");
+    parser
+        .set_language(&tree_sitter_cpp::language())
+        .expect("Error loading C++ grammar");
 
     let tree = parser.parse(&source, None).unwrap();
     let mut functions = Vec::new();
@@ -146,11 +148,18 @@ pub fn extract_functions(file_path: &str) -> std::io::Result<Vec<ExtractedFuncti
         let mut walker = node.walk();
         for child in node.children(&mut walker) {
             let kind = child.kind();
-            if kind == "function_declarator" || kind == "pointer_declarator" || kind == "reference_declarator" {
+            if kind == "function_declarator"
+                || kind == "pointer_declarator"
+                || kind == "reference_declarator"
+            {
                 return extract_name(child, source);
             }
-            if kind == "qualified_identifier" || kind == "identifier" || kind == "field_identifier" {
-                return Some(String::from_utf8_lossy(&source[child.start_byte()..child.end_byte()]).to_string());
+            if kind == "qualified_identifier" || kind == "identifier" || kind == "field_identifier"
+            {
+                return Some(
+                    String::from_utf8_lossy(&source[child.start_byte()..child.end_byte()])
+                        .to_string(),
+                );
             }
         }
         None
@@ -168,7 +177,8 @@ mod tests {
 
     #[test]
     fn test_clean_code_comments() {
-        let input = "void main() {\n  // single line\n  int a = 1; /* multi\n  line */\n  return 0;\n}";
+        let input =
+            "void main() {\n  // single line\n  int a = 1; /* multi\n  line */\n  return 0;\n}";
         // The regexes collapse whitespace and handle line breaks.
         // "// single line" + newline results in a double newline.
         // Multiple spaces are collapsed.
@@ -188,7 +198,7 @@ mod tests {
     fn test_extract_functions_simple() -> std::io::Result<()> {
         let mut file = NamedTempFile::new()?;
         writeln!(file, "int add(int a, int b) {{ return a + b; }}")?;
-        
+
         let functions = extract_functions(file.path().to_str().unwrap())?;
         assert_eq!(functions.len(), 1);
         assert_eq!(functions[0].function_name, "add");
@@ -199,8 +209,11 @@ mod tests {
     #[test]
     fn test_extract_functions_template() -> std::io::Result<()> {
         let mut file = NamedTempFile::new()?;
-        writeln!(file, "template <typename T>\nT sum(T a, T b) {{ return a + b; }}")?;
-        
+        writeln!(
+            file,
+            "template <typename T>\nT sum(T a, T b) {{ return a + b; }}"
+        )?;
+
         let functions = extract_functions(file.path().to_str().unwrap())?;
         assert_eq!(functions.len(), 1);
         assert_eq!(functions[0].function_name, "sum");
