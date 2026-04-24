@@ -27,3 +27,7 @@ Thumbs.db
 # Vite
 dist/
 build/
+
+# AI Agents .md files
+CLAUDE.md
+GEMINI.md

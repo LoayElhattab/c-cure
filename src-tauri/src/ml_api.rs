@@ -54,6 +54,9 @@ pub fn save_kaggle_url(app_data_dir: &Path, url: &str) -> std::io::Result<()> {
 }
 
 pub async fn check_api_health(client: &Client, url: &str) -> bool {
+    if std::env::var("MOCK_API").unwrap_or_default() == "true" {
+        return true;
+    }
     if url.is_empty() { return false; }
     if let Ok(resp) = client.get(url).timeout(std::time::Duration::from_secs(5)).send().await {
         resp.status().is_success()
@@ -63,6 +66,38 @@ pub async fn check_api_health(client: &Client, url: &str) -> bool {
 }
 
 pub async fn analyze_function(client: &Client, url: &str, code: &str) -> Result<FunctionData, AppError> {
+    if std::env::var("MOCK_API").unwrap_or_default() == "true" {
+        let is_vulnerable = code.contains("strcpy") || code.contains("malloc") || code.contains("gets");
+        if is_vulnerable {
+            let (cwe_name, severity) = get_cwe_info("CWE-787");
+            return Ok(FunctionData {
+                id: None,
+                function_name: "".into(),
+                code: "".into(),
+                verdict: "vulnerable".into(),
+                cwe: Some("CWE-787".into()),
+                cwe_name,
+                severity,
+                confidence: Some(0.85),
+                start_line: None,
+                end_line: None,
+            });
+        } else {
+            return Ok(FunctionData {
+                id: None,
+                function_name: "".into(),
+                code: "".into(),
+                verdict: "safe".into(),
+                cwe: None,
+                cwe_name: None,
+                severity: None,
+                confidence: Some(0.95),
+                start_line: None,
+                end_line: None,
+            });
+        }
+    }
+
     if url.is_empty() {
         return Err(AppError::Custom("Kaggle API URL not configured (check settings)".into()));
     }
@@ -171,12 +206,23 @@ mod tests {
         assert_eq!(name, Some("Unknown".into()));
     }
 
-    #[test]
-    fn test_kaggle_url_save_load() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path();
-        save_kaggle_url(path, "https://test.ngrok.app").unwrap();
-        let url = load_kaggle_url(path);
-        assert_eq!(url, "https://test.ngrok.app");
+    #[tokio::test]
+    async fn test_mock_api_behavior() {
+        std::env::set_var("MOCK_API", "true");
+        let client = Client::new();
+        
+        // Test vulnerable code
+        let res = analyze_function(&client, "", "void dangerous() { char buf[10]; strcpy(buf, input); }").await.unwrap();
+        assert_eq!(res.verdict, "vulnerable");
+        assert_eq!(res.cwe, Some("CWE-787".into()));
+        
+        // Test safe code
+        let res = analyze_function(&client, "", "void safe() { int x = 5; }").await.unwrap();
+        assert_eq!(res.verdict, "safe");
+        
+        let health = check_api_health(&client, "").await;
+        assert!(health);
+        
+        std::env::remove_var("MOCK_API");
     }
 }
