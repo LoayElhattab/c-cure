@@ -1,14 +1,14 @@
-pub mod error;
-pub mod db;
-pub mod parser;
-pub mod ml_api;
-pub mod report;
-pub mod monitor;
 pub mod commands;
+pub mod db;
+pub mod error;
+pub mod ml_api;
+pub mod monitor;
+pub mod parser;
+pub mod report;
 
+use reqwest::Client;
 use std::path::PathBuf;
 use tauri::Manager;
-use reqwest::Client;
 use tokio::sync::Mutex;
 
 pub struct AppState {
@@ -21,16 +21,19 @@ pub struct AppState {
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let app_data_dir = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."));
-            
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| PathBuf::from("."));
+
             // Check for old db path for one-time migration
             let old_db_path = std::env::current_exe()
                 .ok()
                 .and_then(|exe| exe.parent().map(|p| p.join("backend").join("ccure.db")));
-                
+
             let db_manager = db::DatabaseManager::new(&app_data_dir, old_db_path.as_deref())
                 .expect("Failed to initialize database");
-                
+
             app.manage(AppState {
                 db: Mutex::new(db_manager),
                 reqwest_client: Client::builder()
@@ -39,7 +42,7 @@ pub fn run() {
                     .unwrap_or_default(),
                 app_data_dir,
             });
-            
+
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
@@ -67,5 +70,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
-

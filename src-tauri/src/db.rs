@@ -187,7 +187,7 @@ impl DatabaseManager {
             CREATE INDEX IF NOT EXISTS idx_functions_file_id ON functions(file_id);
             CREATE INDEX IF NOT EXISTS idx_functions_verdict ON functions(verdict);
             CREATE INDEX IF NOT EXISTS idx_functions_file_verdict ON functions(file_id, verdict);
-            CREATE INDEX IF NOT EXISTS idx_file_hashes_project ON file_hashes(project_id);"
+            CREATE INDEX IF NOT EXISTS idx_file_hashes_project ON file_hashes(project_id);",
         )?;
         Ok(())
     }
@@ -201,7 +201,8 @@ impl DatabaseManager {
     }
 
     pub fn delete_analysis(&self, analysis_id: i32) -> Result<(), AppError> {
-        self.conn.execute("DELETE FROM analyses WHERE id = ?1", params![analysis_id])?;
+        self.conn
+            .execute("DELETE FROM analyses WHERE id = ?1", params![analysis_id])?;
         Ok(())
     }
 
@@ -215,7 +216,7 @@ impl DatabaseManager {
             LEFT JOIN files fi ON fi.analysis_id = a.id
             LEFT JOIN functions f ON f.file_id = fi.id
             GROUP BY a.id
-            ORDER BY a.timestamp DESC"
+            ORDER BY a.timestamp DESC",
         )?;
 
         let iter = stmt.query_map([], |row| {
@@ -237,22 +238,28 @@ impl DatabaseManager {
     }
 
     pub fn get_report(&self, analysis_id: i32) -> Result<Option<Report>, AppError> {
-        let mut stmt = self.conn.prepare("SELECT id, project_name, project_path, timestamp FROM analyses WHERE id = ?1")?;
-        let analysis_row = stmt.query_row(params![analysis_id], |row| {
-            Ok((
-                row.get::<_, i32>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, Option<String>>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        }).optional()?;
+        let mut stmt = self.conn.prepare(
+            "SELECT id, project_name, project_path, timestamp FROM analyses WHERE id = ?1",
+        )?;
+        let analysis_row = stmt
+            .query_row(params![analysis_id], |row| {
+                Ok((
+                    row.get::<_, i32>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })
+            .optional()?;
 
         let Some((id, project_name, project_path, timestamp)) = analysis_row else {
             return Ok(None);
         };
 
         let mut files = Vec::new();
-        let mut file_stmt = self.conn.prepare("SELECT id, file_path FROM files WHERE analysis_id = ?1")?;
+        let mut file_stmt = self
+            .conn
+            .prepare("SELECT id, file_path FROM files WHERE analysis_id = ?1")?;
         let file_iter = file_stmt.query_map(params![analysis_id], |row| {
             Ok((row.get::<_, i32>(0)?, row.get::<_, String>(1)?))
         })?;
@@ -275,12 +282,12 @@ impl DatabaseManager {
                     end_line: row.get(9)?,
                 })
             })?;
-            
+
             let mut functions = Vec::new();
             for fn_res in fn_iter {
                 functions.push(fn_res?);
             }
-            
+
             files.push(FileData {
                 file_path,
                 functions,
@@ -326,17 +333,22 @@ impl DatabaseManager {
     }
 
     pub fn get_vuln_count(&self) -> Result<i64, AppError> {
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM functions WHERE verdict = 'vulnerable'",
-            [],
-            |row| row.get(0),
-        ).unwrap_or(0);
+        let count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM functions WHERE verdict = 'vulnerable'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
         Ok(count)
     }
 
     pub fn get_statistics(&self) -> Result<StatisticsData, AppError> {
-        let kpis: Kpis = self.conn.query_row(
-            "SELECT
+        let kpis: Kpis = self
+            .conn
+            .query_row(
+                "SELECT
                 COUNT(DISTINCT a.id),
                 COUNT(DISTINCT fi.id),
                 COUNT(f.id),
@@ -345,25 +357,30 @@ impl DatabaseManager {
             FROM analyses a
             LEFT JOIN files fi ON fi.analysis_id = a.id
             LEFT JOIN functions f ON f.file_id = fi.id",
-            [],
-            |row| {
-                Ok(Kpis {
-                    total_analyses: row.get::<_, Option<i32>>(0)?.unwrap_or(0),
-                    total_files: row.get::<_, Option<i32>>(1)?.unwrap_or(0),
-                    total_functions: row.get::<_, Option<i32>>(2)?.unwrap_or(0),
-                    total_vulnerable: row.get::<_, Option<i32>>(3)?.unwrap_or(0),
-                    total_safe: row.get::<_, Option<i32>>(4)?.unwrap_or(0),
-                })
-            }
-        ).unwrap_or(Kpis {
-            total_analyses: 0, total_files: 0, total_functions: 0, total_vulnerable: 0, total_safe: 0
-        });
+                [],
+                |row| {
+                    Ok(Kpis {
+                        total_analyses: row.get::<_, Option<i32>>(0)?.unwrap_or(0),
+                        total_files: row.get::<_, Option<i32>>(1)?.unwrap_or(0),
+                        total_functions: row.get::<_, Option<i32>>(2)?.unwrap_or(0),
+                        total_vulnerable: row.get::<_, Option<i32>>(3)?.unwrap_or(0),
+                        total_safe: row.get::<_, Option<i32>>(4)?.unwrap_or(0),
+                    })
+                },
+            )
+            .unwrap_or(Kpis {
+                total_analyses: 0,
+                total_files: 0,
+                total_functions: 0,
+                total_vulnerable: 0,
+                total_safe: 0,
+            });
 
         let mut stmt = self.conn.prepare(
             "SELECT cwe, cwe_name, severity, COUNT(*) as count
              FROM functions
              WHERE verdict = 'vulnerable' AND cwe IS NOT NULL
-             GROUP BY cwe ORDER BY count DESC"
+             GROUP BY cwe ORDER BY count DESC",
         )?;
         let iter = stmt.query_map([], |row| {
             Ok(CweCount {
@@ -374,13 +391,15 @@ impl DatabaseManager {
             })
         })?;
         let mut cwe_counts = Vec::new();
-        for r in iter { cwe_counts.push(r?); }
+        for r in iter {
+            cwe_counts.push(r?);
+        }
 
         let mut stmt = self.conn.prepare(
             "SELECT severity, COUNT(*) as count
              FROM functions
              WHERE verdict = 'vulnerable' AND severity IS NOT NULL
-             GROUP BY severity"
+             GROUP BY severity",
         )?;
         let iter = stmt.query_map([], |row| {
             Ok(SeverityCount {
@@ -389,7 +408,9 @@ impl DatabaseManager {
             })
         })?;
         let mut severity_counts = Vec::new();
-        for r in iter { severity_counts.push(r?); }
+        for r in iter {
+            severity_counts.push(r?);
+        }
 
         let mut stmt = self.conn.prepare(
             "SELECT
@@ -398,11 +419,16 @@ impl DatabaseManager {
                 SUM(CASE WHEN f.verdict = 'vulnerable' THEN 1 ELSE 0 END) as vuln_count
              FROM files fi
              JOIN functions f ON f.file_id = fi.id
-             GROUP BY fi.id ORDER BY vuln_count DESC LIMIT 10"
+             GROUP BY fi.id ORDER BY vuln_count DESC LIMIT 10",
         )?;
         let iter = stmt.query_map([], |row| {
             let path: String = row.get(0)?;
-            let label = path.replace("\\", "/").split("/").last().unwrap_or("").to_string();
+            let label = path
+                .replace("\\", "/")
+                .split("/")
+                .last()
+                .unwrap_or("")
+                .to_string();
             Ok(FileRatio {
                 label,
                 safe: row.get::<_, Option<i32>>(1)?.unwrap_or(0),
@@ -410,7 +436,9 @@ impl DatabaseManager {
             })
         })?;
         let mut file_ratios = Vec::new();
-        for r in iter { file_ratios.push(r?); }
+        for r in iter {
+            file_ratios.push(r?);
+        }
 
         let recent_analyses = self.get_all_analyses()?.into_iter().take(7).collect();
 
@@ -422,7 +450,7 @@ impl DatabaseManager {
              LEFT JOIN files fi ON fi.analysis_id = a.id
              LEFT JOIN functions f ON f.file_id = fi.id
              GROUP BY a.id
-             ORDER BY a.timestamp ASC"
+             ORDER BY a.timestamp ASC",
         )?;
         let iter = stmt.query_map([], |row| {
             Ok(TrendData {
@@ -431,7 +459,9 @@ impl DatabaseManager {
             })
         })?;
         let mut trend = Vec::new();
-        for r in iter { trend.push(r?); }
+        for r in iter {
+            trend.push(r?);
+        }
 
         Ok(StatisticsData {
             dashboard: DashboardStats {
@@ -454,7 +484,9 @@ impl DatabaseManager {
             Err(e) => {
                 if let rusqlite::Error::SqliteFailure(e_code, _) = e {
                     if e_code.code == rusqlite::ErrorCode::ConstraintViolation {
-                        return Err(AppError::Custom("This folder is already being watched.".to_string()));
+                        return Err(AppError::Custom(
+                            "This folder is already being watched.".to_string(),
+                        ));
                     }
                 }
                 Err(AppError::Database(e))
@@ -473,16 +505,22 @@ impl DatabaseManager {
             })
         })?;
         let mut projects = Vec::new();
-        for r in iter { projects.push(r?); }
+        for r in iter {
+            projects.push(r?);
+        }
         Ok(projects)
     }
 
-    pub fn save_file_hashes(&self, project_id: i32, hashes: &HashMap<String, String>) -> Result<(), AppError> {
+    pub fn save_file_hashes(
+        &self,
+        project_id: i32,
+        hashes: &HashMap<String, String>,
+    ) -> Result<(), AppError> {
         let mut stmt = self.conn.prepare(
             "INSERT INTO file_hashes (project_id, file_path, file_hash)
              VALUES (?1, ?2, ?3)
              ON CONFLICT(project_id, file_path)
-             DO UPDATE SET file_hash = excluded.file_hash, hashed_at = CURRENT_TIMESTAMP"
+             DO UPDATE SET file_hash = excluded.file_hash, hashed_at = CURRENT_TIMESTAMP",
         )?;
         for (path, hash) in hashes {
             stmt.execute(params![project_id, path, hash])?;
@@ -491,7 +529,9 @@ impl DatabaseManager {
     }
 
     pub fn get_file_hashes(&self, project_id: i32) -> Result<HashMap<String, String>, AppError> {
-        let mut stmt = self.conn.prepare("SELECT file_path, file_hash FROM file_hashes WHERE project_id = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT file_path, file_hash FROM file_hashes WHERE project_id = ?1")?;
         let iter = stmt.query_map(params![project_id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
@@ -504,7 +544,10 @@ impl DatabaseManager {
     }
 
     pub fn remove_watched_project(&self, project_id: i32) -> Result<(), AppError> {
-        self.conn.execute("DELETE FROM watched_projects WHERE id = ?1", params![project_id])?;
+        self.conn.execute(
+            "DELETE FROM watched_projects WHERE id = ?1",
+            params![project_id],
+        )?;
         Ok(())
     }
 }
@@ -524,11 +567,14 @@ mod tests {
     fn test_init_db() {
         let manager = setup_db();
         // Check if analyses table exists
-        let res: i32 = manager.conn.query_row(
-            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='analyses'",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        let res: i32 = manager
+            .conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='analyses'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(res, 1);
     }
 
@@ -548,7 +594,7 @@ mod tests {
         let manager = setup_db();
         let aid = manager.save_analysis("P", "L").unwrap();
         let fid = manager.save_file(aid, "main.cpp").unwrap();
-        
+
         let func = FunctionData {
             id: None,
             function_name: "test_fn".into(),

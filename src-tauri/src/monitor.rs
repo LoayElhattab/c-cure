@@ -1,11 +1,11 @@
-use md5::{Md5, Digest};
+use md5::{Digest, Md5};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
 
-use crate::error::AppError;
 use crate::db::DatabaseManager;
+use crate::error::AppError;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct MonitorChangeResult {
@@ -42,7 +42,7 @@ fn scan_folder(folder_path: &Path) -> HashMap<String, String> {
                     false
                 }
             });
-            
+
             if is_excluded {
                 continue;
             }
@@ -59,26 +59,33 @@ fn scan_folder(folder_path: &Path) -> HashMap<String, String> {
     hashes
 }
 
-pub fn register_project(db: &DatabaseManager, folder_path: &str) -> Result<serde_json::Value, AppError> {
+pub fn register_project(
+    db: &DatabaseManager,
+    folder_path: &str,
+) -> Result<serde_json::Value, AppError> {
     let path = Path::new(folder_path);
     if !path.exists() {
-        return Err(AppError::Custom(format!("Folder not found: {}", folder_path)));
+        return Err(AppError::Custom(format!(
+            "Folder not found: {}",
+            folder_path
+        )));
     }
-    
-    let name = path.file_name()
+
+    let name = path
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "Unknown".to_string());
-        
+
     let project_id = db.add_watched_project(&name, folder_path)?;
     let hashes = scan_folder(path);
-    
+
     if hashes.is_empty() {
         // We added it, but maybe we should rollback? Python version didn't, but let's just return error
         // Actually python version did `if not hashes: return {"error": ...}`
     }
-    
+
     db.save_file_hashes(project_id, &hashes)?;
-    
+
     Ok(serde_json::json!({
         "id": project_id,
         "name": name,
@@ -87,21 +94,24 @@ pub fn register_project(db: &DatabaseManager, folder_path: &str) -> Result<serde
     }))
 }
 
-pub fn check_changes(db: &DatabaseManager, project_id: i32) -> Result<MonitorChangeResult, AppError> {
+pub fn check_changes(
+    db: &DatabaseManager,
+    project_id: i32,
+) -> Result<MonitorChangeResult, AppError> {
     let projects = db.get_watched_projects()?;
     let project = projects.into_iter().find(|p| p.id == project_id);
-    
+
     let Some(project) = project else {
         return Err(AppError::Custom("Watched project not found.".to_string()));
     };
-    
+
     let stored = db.get_file_hashes(project_id)?;
     let current = scan_folder(Path::new(&project.folder_path));
-    
+
     let mut changed = Vec::new();
     let mut added = Vec::new();
     let mut deleted = Vec::new();
-    
+
     for (path, h) in &current {
         match stored.get(path) {
             None => added.push(path.clone()),
@@ -109,15 +119,15 @@ pub fn check_changes(db: &DatabaseManager, project_id: i32) -> Result<MonitorCha
             _ => {}
         }
     }
-    
+
     for path in stored.keys() {
         if !current.contains_key(path) {
             deleted.push(path.clone());
         }
     }
-    
+
     let total_changes = changed.len() + added.len();
-    
+
     Ok(MonitorChangeResult {
         project_id,
         project_name: project.name,
@@ -129,24 +139,30 @@ pub fn check_changes(db: &DatabaseManager, project_id: i32) -> Result<MonitorCha
     })
 }
 
-pub fn refresh_hashes(db: &DatabaseManager, project_id: i32) -> Result<serde_json::Value, AppError> {
+pub fn refresh_hashes(
+    db: &DatabaseManager,
+    project_id: i32,
+) -> Result<serde_json::Value, AppError> {
     let projects = db.get_watched_projects()?;
     let project = projects.into_iter().find(|p| p.id == project_id);
-    
+
     let Some(project) = project else {
         return Err(AppError::Custom("Watched project not found.".to_string()));
     };
-    
+
     let hashes = scan_folder(Path::new(&project.folder_path));
     db.save_file_hashes(project_id, &hashes)?;
-    
+
     Ok(serde_json::json!({
         "refreshed": true,
         "files_tracked": hashes.len()
     }))
 }
 
-pub fn unregister_project(db: &DatabaseManager, project_id: i32) -> Result<serde_json::Value, AppError> {
+pub fn unregister_project(
+    db: &DatabaseManager,
+    project_id: i32,
+) -> Result<serde_json::Value, AppError> {
     db.remove_watched_project(project_id)?;
     Ok(serde_json::json!({"removed": true}))
 }

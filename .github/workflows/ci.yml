@@ -1,4 +1,4 @@
-name: CI (The Safety Net)
+name: ci-pipeline
 
 on:
   push:
