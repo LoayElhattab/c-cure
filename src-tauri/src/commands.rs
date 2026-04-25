@@ -1,9 +1,8 @@
 use serde_json::Value;
-use std::path::Path;
 
 use crate::db::{AnalysisSummary, Report, StatisticsData, WatchedProject};
 use crate::error::AppError;
-use crate::ml_api::AnalysisResult;
+use crate::inference::AnalysisResult;
 use crate::AppState;
 
 #[tauri::command]
@@ -11,57 +10,17 @@ pub async fn analyze_file(
     state: tauri::State<'_, AppState>,
     file_path: String,
 ) -> Result<AnalysisResult, AppError> {
-    let functions = crate::parser::extract_functions(&file_path)
-        .map_err(|e| AppError::Custom(format!("Extract failed: {}", e)))?;
+    let url = crate::inference::load_kaggle_url(&state.app_data_dir);
+    
+    let result = crate::services::analysis_service::analyze_file_service(
+        &state.pool,
+        state.reqwest_client.clone(),
+        url,
+        file_path,
+    )
+    .await?;
 
-    if functions.is_empty() {
-        return Err(AppError::Custom(
-            "No functions found in file. Is it a valid C++ file?".into(),
-        ));
-    }
-
-    let url = crate::ml_api::load_kaggle_url(&state.app_data_dir);
-    if url.is_empty() {
-        return Err(AppError::Custom("Kaggle API URL not configured".into()));
-    }
-
-    let path = Path::new(&file_path);
-    let project_name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "Unknown".to_string());
-
-    let pool = &state.pool;
-    let analysis_id = crate::db::analysis_repo::save_analysis(pool, project_name.clone(), file_path.clone()).await?;
-    let file_id = crate::db::analysis_repo::save_file(pool, analysis_id, file_path.clone()).await?;
-
-    let mut results = Vec::new();
-    let mut vuln_count = 0;
-
-    for fn_info in functions {
-        let mut result =
-            crate::ml_api::analyze_function(&state.reqwest_client, &url, &fn_info.code).await?;
-        result.function_name = fn_info.function_name.clone();
-        result.code = fn_info.code.clone();
-        result.start_line = Some(fn_info.start_line);
-        result.end_line = Some(fn_info.end_line);
-
-        crate::db::analysis_repo::save_function(pool, file_id, result.clone()).await?;
-        if result.verdict == "vulnerable" {
-            vuln_count += 1;
-        }
-        results.push(result);
-    }
-
-    Ok(AnalysisResult {
-        analysis_id: analysis_id as i32,
-        project_name,
-        path: file_path,
-        files_scanned: 1,
-        total_functions: results.len() as i32,
-        vuln_count,
-        functions: results,
-    })
+    Ok(result)
 }
 
 #[tauri::command]
@@ -69,87 +28,17 @@ pub async fn analyze_folder(
     state: tauri::State<'_, AppState>,
     folder_path: String,
 ) -> Result<AnalysisResult, AppError> {
-    let url = crate::ml_api::load_kaggle_url(&state.app_data_dir);
-    if url.is_empty() {
-        return Err(AppError::Custom("Kaggle API URL not configured".into()));
-    }
+    let url = crate::inference::load_kaggle_url(&state.app_data_dir);
 
-    let mut cpp_files = Vec::new();
-    let ext_list = ["cpp", "c", "h", "cc", "cxx"];
+    let result = crate::services::analysis_service::analyze_folder_service(
+        &state.pool,
+        state.reqwest_client.clone(),
+        url,
+        folder_path,
+    )
+    .await?;
 
-    for entry in walkdir::WalkDir::new(&folder_path)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        let p = entry.path();
-        if p.is_file() {
-            let relative = p.strip_prefix(&folder_path).unwrap_or(p);
-            let is_excluded = relative.components().any(|c| {
-                if let std::path::Component::Normal(name) = c {
-                    let s = name.to_string_lossy();
-                    s.starts_with('.') || s == "build" || s == "cmake" || s == "node_modules"
-                } else {
-                    false
-                }
-            });
-            if is_excluded {
-                continue;
-            }
-
-            if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-                if ext_list.contains(&ext) {
-                    cpp_files.push(p.to_string_lossy().to_string());
-                }
-            }
-        }
-    }
-
-    if cpp_files.is_empty() {
-        return Err(AppError::Custom("No C++ files found in folder.".into()));
-    }
-
-    let pool = &state.pool;
-    let path = Path::new(&folder_path);
-    let project_name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "Unknown".to_string());
-
-    let analysis_id = crate::db::analysis_repo::save_analysis(pool, project_name.clone(), folder_path.clone()).await?;
-
-    let mut all_functions = Vec::new();
-    let mut total_vuln = 0;
-
-    for file_path in &cpp_files {
-        let file_id = crate::db::analysis_repo::save_file(pool, analysis_id, file_path.clone()).await?;
-        if let Ok(functions) = crate::parser::extract_functions(file_path) {
-            for fn_info in functions {
-                let mut result =
-                    crate::ml_api::analyze_function(&state.reqwest_client, &url, &fn_info.code)
-                        .await?;
-                result.function_name = fn_info.function_name.clone();
-                result.code = fn_info.code.clone();
-                result.start_line = Some(fn_info.start_line);
-                result.end_line = Some(fn_info.end_line);
-
-                crate::db::analysis_repo::save_function(pool, file_id, result.clone()).await?;
-                if result.verdict == "vulnerable" {
-                    total_vuln += 1;
-                }
-                all_functions.push(result);
-            }
-        }
-    }
-
-    Ok(AnalysisResult {
-        analysis_id: analysis_id as i32,
-        project_name,
-        path: folder_path,
-        files_scanned: cpp_files.len() as i32,
-        total_functions: all_functions.len() as i32,
-        vuln_count: total_vuln,
-        functions: all_functions,
-    })
+    Ok(result)
 }
 
 #[tauri::command]
@@ -200,14 +89,15 @@ pub fn extract_functions(file_path: String) -> Result<Value, AppError> {
 
 #[tauri::command]
 pub async fn check_api(state: tauri::State<'_, AppState>) -> Result<Value, AppError> {
-    let url = crate::ml_api::load_kaggle_url(&state.app_data_dir);
-    let reachable = crate::ml_api::check_api_health(&state.reqwest_client, &url).await;
+    let url = crate::inference::load_kaggle_url(&state.app_data_dir);
+    let provider = crate::inference::get_provider(state.reqwest_client.clone(), url);
+    let reachable = provider.check_health().await;
     Ok(serde_json::json!({ "reachable": reachable }))
 }
 
 #[tauri::command]
 pub async fn get_settings(state: tauri::State<'_, AppState>) -> Result<Value, AppError> {
-    let url = crate::ml_api::load_kaggle_url(&state.app_data_dir);
+    let url = crate::inference::load_kaggle_url(&state.app_data_dir);
     Ok(serde_json::json!({ "kaggle_url": url }))
 }
 
@@ -216,7 +106,8 @@ pub fn save_settings(
     state: tauri::State<'_, AppState>,
     kaggle_url: String,
 ) -> Result<Value, AppError> {
-    crate::ml_api::save_kaggle_url(&state.app_data_dir, &kaggle_url)?;
+    crate::inference::save_kaggle_url(&state.app_data_dir, &kaggle_url)
+        .map_err(|e| AppError::Custom(format!("Failed to save settings: {}", e)))?;
     Ok(serde_json::json!({ "saved": true }))
 }
 
@@ -227,7 +118,8 @@ pub async fn generate_pdf(
 ) -> Result<Value, AppError> {
     let report = crate::db::analysis_repo::get_report(&state.pool, analysis_id as i32).await?
         .ok_or_else(|| AppError::Custom("Report not found".into()))?;
-    let path = crate::report::generate_pdf(&report)?;
+    let path = crate::report::generate_pdf(&report)
+        .map_err(|e| AppError::Custom(format!("PDF generation failed: {}", e)))?;
     Ok(serde_json::json!({ "path": path }))
 }
 
@@ -236,6 +128,7 @@ pub fn open_path(path: String) -> Result<(), AppError> {
     open::that(&path).map_err(|e| AppError::Custom(e.to_string()))
 }
 
+// Consider moving these to a monitor_service in the future if they grow in complexity
 #[tauri::command]
 pub async fn monitor_register(
     state: tauri::State<'_, AppState>,

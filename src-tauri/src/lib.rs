@@ -1,10 +1,11 @@
 pub mod commands;
 pub mod db;
 pub mod error;
-pub mod ml_api;
+pub mod inference;
 pub mod monitor;
 pub mod parser;
 pub mod report;
+pub mod services;
 
 use reqwest::Client;
 use std::path::PathBuf;
