@@ -14,12 +14,14 @@ pub async fn analyze_file_service(
 
     if functions.is_empty() {
         return Err(AppError::Custom(
-            "No functions found in file. Is it a valid C++ file?".to_string()
+            "No functions found in file. Is it a valid C++ file?".to_string(),
         ));
     }
 
     if url.is_empty() && std::env::var("MOCK_API").unwrap_or_default() != "true" {
-        return Err(AppError::Custom("Kaggle API URL not configured".to_string()));
+        return Err(AppError::Custom(
+            "Kaggle API URL not configured".to_string(),
+        ));
     }
 
     let path = Path::new(&file_path);
@@ -65,7 +67,9 @@ pub async fn analyze_folder_service(
     folder_path: String,
 ) -> Result<AnalysisResult, AppError> {
     if url.is_empty() && std::env::var("MOCK_API").unwrap_or_default() != "true" {
-        return Err(AppError::Custom("Kaggle API URL not configured".to_string()));
+        return Err(AppError::Custom(
+            "Kaggle API URL not configured".to_string(),
+        ));
     }
 
     let mut cpp_files = Vec::new();
@@ -99,7 +103,9 @@ pub async fn analyze_folder_service(
     }
 
     if cpp_files.is_empty() {
-        return Err(AppError::Custom("No C++ files found in folder.".to_string()));
+        return Err(AppError::Custom(
+            "No C++ files found in folder.".to_string(),
+        ));
     }
 
     let path = Path::new(&folder_path);

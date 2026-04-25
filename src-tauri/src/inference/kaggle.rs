@@ -1,9 +1,9 @@
 use super::provider::InferenceProvider;
 use crate::db::FunctionData;
+use anyhow::Result;
 use reqwest::Client;
 use std::future::Future;
 use std::pin::Pin;
-use anyhow::Result;
 
 pub struct KaggleProvider {
     client: Client,
@@ -22,7 +22,8 @@ impl InferenceProvider for KaggleProvider {
             if self.url.is_empty() {
                 return false;
             }
-            if let Ok(resp) = self.client
+            if let Ok(resp) = self
+                .client
                 .get(&self.url)
                 .timeout(std::time::Duration::from_secs(5))
                 .send()
@@ -41,11 +42,14 @@ impl InferenceProvider for KaggleProvider {
     ) -> Pin<Box<dyn Future<Output = Result<FunctionData>> + Send + '_>> {
         Box::pin(async move {
             if self.url.is_empty() {
-                return Err(anyhow::anyhow!("Kaggle API URL not configured (check settings)"));
+                return Err(anyhow::anyhow!(
+                    "Kaggle API URL not configured (check settings)"
+                ));
             }
 
             let body = serde_json::json!({ "code": code });
-            let resp = self.client
+            let resp = self
+                .client
                 .post(format!("{}/predict", self.url))
                 .json(&body)
                 .timeout(std::time::Duration::from_secs(60))

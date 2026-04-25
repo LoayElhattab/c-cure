@@ -1,8 +1,8 @@
 use super::provider::InferenceProvider;
 use crate::db::FunctionData;
+use anyhow::Result;
 use std::future::Future;
 use std::pin::Pin;
-use anyhow::Result;
 
 pub struct MockProvider;
 

@@ -1,7 +1,7 @@
+use crate::db::FunctionData;
+use anyhow::Result;
 use std::future::Future;
 use std::pin::Pin;
-use anyhow::Result;
-use crate::db::FunctionData;
 
 pub trait InferenceProvider: Send + Sync {
     fn check_health(&self) -> Pin<Box<dyn Future<Output = bool> + Send + '_>>;

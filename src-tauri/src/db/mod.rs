@@ -109,7 +109,10 @@ pub struct WatchedProject {
     pub registered_at: String,
 }
 
-pub async fn create_pool(app_data_dir: &Path, old_db_path: Option<&Path>) -> Result<Pool, AppError> {
+pub async fn create_pool(
+    app_data_dir: &Path,
+    old_db_path: Option<&Path>,
+) -> Result<Pool, AppError> {
     if !app_data_dir.exists() {
         fs::create_dir_all(app_data_dir)?;
     }
@@ -125,7 +128,9 @@ pub async fn create_pool(app_data_dir: &Path, old_db_path: Option<&Path>) -> Res
     }
 
     let cfg = Config::new(&db_path);
-    let pool = cfg.create_pool(Runtime::Tokio1).map_err(|e| AppError::Custom(e.to_string()))?;
+    let pool = cfg
+        .create_pool(Runtime::Tokio1)
+        .map_err(|e| AppError::Custom(e.to_string()))?;
 
     init_db(&pool).await?;
 
@@ -133,12 +138,14 @@ pub async fn create_pool(app_data_dir: &Path, old_db_path: Option<&Path>) -> Res
 }
 
 pub async fn init_db(pool: &Pool) -> Result<(), AppError> {
-    pool.get().await?.interact(|conn| {
-        conn.pragma_update(None, "foreign_keys", "ON")?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS analyses (
+    pool.get()
+        .await?
+        .interact(|conn| {
+            conn.pragma_update(None, "foreign_keys", "ON")?;
+            conn.pragma_update(None, "journal_mode", "WAL")?;
+            conn.pragma_update(None, "synchronous", "NORMAL")?;
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS analyses (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp    DATETIME DEFAULT CURRENT_TIMESTAMP,
                 project_name TEXT NOT NULL,
@@ -185,8 +192,9 @@ pub async fn init_db(pool: &Pool) -> Result<(), AppError> {
             CREATE INDEX IF NOT EXISTS idx_functions_verdict ON functions(verdict);
             CREATE INDEX IF NOT EXISTS idx_functions_file_verdict ON functions(file_id, verdict);
             CREATE INDEX IF NOT EXISTS idx_file_hashes_project ON file_hashes(project_id);",
-        )?;
-        Ok::<_, rusqlite::Error>(())
-    }).await??;
+            )?;
+            Ok::<_, rusqlite::Error>(())
+        })
+        .await??;
     Ok(())
 }

@@ -11,7 +11,7 @@ pub async fn analyze_file(
     file_path: String,
 ) -> Result<AnalysisResult, AppError> {
     let url = crate::inference::load_kaggle_url(&state.app_data_dir);
-    
+
     let result = crate::services::analysis_service::analyze_file_service(
         &state.pool,
         state.reqwest_client.clone(),
@@ -53,7 +53,8 @@ pub async fn get_report(
     state: tauri::State<'_, AppState>,
     analysis_id: i32,
 ) -> Result<Report, AppError> {
-    crate::db::analysis_repo::get_report(&state.pool, analysis_id).await?
+    crate::db::analysis_repo::get_report(&state.pool, analysis_id)
+        .await?
         .ok_or_else(|| AppError::Custom("Report not found".into()))
 }
 
@@ -116,7 +117,8 @@ pub async fn generate_pdf(
     state: tauri::State<'_, AppState>,
     analysis_id: u32,
 ) -> Result<Value, AppError> {
-    let report = crate::db::analysis_repo::get_report(&state.pool, analysis_id as i32).await?
+    let report = crate::db::analysis_repo::get_report(&state.pool, analysis_id as i32)
+        .await?
         .ok_or_else(|| AppError::Custom("Report not found".into()))?;
     let path = crate::report::generate_pdf(&report)
         .map_err(|e| AppError::Custom(format!("PDF generation failed: {}", e)))?;

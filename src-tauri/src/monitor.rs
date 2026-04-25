@@ -4,8 +4,8 @@ use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
 
-use deadpool_sqlite::Pool;
 use crate::error::AppError;
+use deadpool_sqlite::Pool;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct MonitorChangeResult {
@@ -76,7 +76,9 @@ pub async fn register_project(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "Unknown".to_string());
 
-    let project_id = crate::db::projects_repo::add_watched_project(pool, name.clone(), folder_path.to_string()).await?;
+    let project_id =
+        crate::db::projects_repo::add_watched_project(pool, name.clone(), folder_path.to_string())
+            .await?;
     let hashes = scan_folder(path);
 
     if hashes.is_empty() {
@@ -94,18 +96,17 @@ pub async fn register_project(
     }))
 }
 
-pub async fn check_changes(
-    pool: &Pool,
-    project_id: i32,
-) -> Result<MonitorChangeResult, AppError> {
-    let projects: Vec<crate::db::WatchedProject> = crate::db::projects_repo::get_watched_projects(pool).await?;
+pub async fn check_changes(pool: &Pool, project_id: i32) -> Result<MonitorChangeResult, AppError> {
+    let projects: Vec<crate::db::WatchedProject> =
+        crate::db::projects_repo::get_watched_projects(pool).await?;
     let project = projects.into_iter().find(|p| p.id == project_id);
 
     let Some(project) = project else {
         return Err(AppError::Custom("Watched project not found.".to_string()));
     };
 
-    let stored: std::collections::HashMap<String, String> = crate::db::projects_repo::get_file_hashes(pool, project_id).await?;
+    let stored: std::collections::HashMap<String, String> =
+        crate::db::projects_repo::get_file_hashes(pool, project_id).await?;
     let current = scan_folder(Path::new(&project.folder_path));
 
     let mut changed = Vec::new();
@@ -139,11 +140,9 @@ pub async fn check_changes(
     })
 }
 
-pub async fn refresh_hashes(
-    pool: &Pool,
-    project_id: i32,
-) -> Result<serde_json::Value, AppError> {
-    let projects: Vec<crate::db::WatchedProject> = crate::db::projects_repo::get_watched_projects(pool).await?;
+pub async fn refresh_hashes(pool: &Pool, project_id: i32) -> Result<serde_json::Value, AppError> {
+    let projects: Vec<crate::db::WatchedProject> =
+        crate::db::projects_repo::get_watched_projects(pool).await?;
     let project = projects.into_iter().find(|p| p.id == project_id);
 
     let Some(project) = project else {

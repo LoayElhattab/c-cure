@@ -4,8 +4,8 @@ pub mod kaggle;
 pub mod mock;
 pub mod provider;
 
-use serde::{Deserialize, Serialize};
 use crate::db::FunctionData;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AnalysisResult {
@@ -19,10 +19,10 @@ pub struct AnalysisResult {
 }
 
 pub use config::{load_kaggle_url, save_kaggle_url};
-pub use provider::InferenceProvider;
+pub use dispatcher::dispatch_analysis;
 pub use kaggle::KaggleProvider;
 pub use mock::MockProvider;
-pub use dispatcher::dispatch_analysis;
+pub use provider::InferenceProvider;
 
 pub fn get_cwe_info(cwe: &str) -> (Option<String>, Option<String>) {
     match cwe {

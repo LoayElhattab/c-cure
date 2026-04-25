@@ -33,7 +33,8 @@ pub fn run() {
 
             let pool = tauri::async_runtime::block_on(async {
                 db::create_pool(&app_data_dir, old_db_path.as_deref()).await
-            }).expect("Failed to initialize database pool");
+            })
+            .expect("Failed to initialize database pool");
 
             app.manage(AppState {
                 pool,

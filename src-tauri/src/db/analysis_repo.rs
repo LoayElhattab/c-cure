@@ -4,29 +4,43 @@ use rusqlite::{params, OptionalExtension};
 use crate::db::{AnalysisSummary, FileData, FunctionData, Report};
 use crate::error::AppError;
 
-pub async fn save_analysis(pool: &Pool, project_name: String, project_path: String) -> Result<i64, AppError> {
-    let id = pool.get().await?.interact(move |conn| {
-        conn.execute(
-            "INSERT INTO analyses (project_name, project_path) VALUES (?1, ?2)",
-            params![project_name, project_path],
-        )?;
-        Ok::<_, rusqlite::Error>(conn.last_insert_rowid())
-    }).await??;
+pub async fn save_analysis(
+    pool: &Pool,
+    project_name: String,
+    project_path: String,
+) -> Result<i64, AppError> {
+    let id = pool
+        .get()
+        .await?
+        .interact(move |conn| {
+            conn.execute(
+                "INSERT INTO analyses (project_name, project_path) VALUES (?1, ?2)",
+                params![project_name, project_path],
+            )?;
+            Ok::<_, rusqlite::Error>(conn.last_insert_rowid())
+        })
+        .await??;
     Ok(id)
 }
 
 pub async fn delete_analysis(pool: &Pool, analysis_id: i32) -> Result<(), AppError> {
-    pool.get().await?.interact(move |conn| {
-        conn.execute("DELETE FROM analyses WHERE id = ?1", params![analysis_id])?;
-        Ok::<_, rusqlite::Error>(())
-    }).await??;
+    pool.get()
+        .await?
+        .interact(move |conn| {
+            conn.execute("DELETE FROM analyses WHERE id = ?1", params![analysis_id])?;
+            Ok::<_, rusqlite::Error>(())
+        })
+        .await??;
     Ok(())
 }
 
 pub async fn get_all_analyses(pool: &Pool) -> Result<Vec<AnalysisSummary>, AppError> {
-    let analyses = pool.get().await?.interact(|conn| {
-        let mut stmt = conn.prepare(
-            "SELECT
+    let analyses = pool
+        .get()
+        .await?
+        .interact(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT
                 a.id, a.project_name, a.project_path, a.timestamp,
                 COUNT(f.id) AS total_functions,
                 SUM(CASE WHEN f.verdict = 'vulnerable' THEN 1 ELSE 0 END) AS vuln_count
@@ -35,25 +49,26 @@ pub async fn get_all_analyses(pool: &Pool) -> Result<Vec<AnalysisSummary>, AppEr
             LEFT JOIN functions f ON f.file_id = fi.id
             GROUP BY a.id
             ORDER BY a.timestamp DESC",
-        )?;
+            )?;
 
-        let iter = stmt.query_map([], |row| {
-            Ok(AnalysisSummary {
-                id: row.get(0)?,
-                project_name: row.get(1)?,
-                project_path: row.get(2)?,
-                timestamp: row.get(3)?,
-                total_functions: row.get::<_, Option<i32>>(4)?.unwrap_or(0),
-                vuln_count: row.get::<_, Option<i32>>(5)?.unwrap_or(0),
-            })
-        })?;
+            let iter = stmt.query_map([], |row| {
+                Ok(AnalysisSummary {
+                    id: row.get(0)?,
+                    project_name: row.get(1)?,
+                    project_path: row.get(2)?,
+                    timestamp: row.get(3)?,
+                    total_functions: row.get::<_, Option<i32>>(4)?.unwrap_or(0),
+                    vuln_count: row.get::<_, Option<i32>>(5)?.unwrap_or(0),
+                })
+            })?;
 
-        let mut results = Vec::new();
-        for r in iter {
-            results.push(r?);
-        }
-        Ok::<_, rusqlite::Error>(results)
-    }).await??;
+            let mut results = Vec::new();
+            for r in iter {
+                results.push(r?);
+            }
+            Ok::<_, rusqlite::Error>(results)
+        })
+        .await??;
     Ok(analyses)
 }
 
@@ -126,13 +141,17 @@ pub async fn get_report(pool: &Pool, analysis_id: i32) -> Result<Option<Report>,
 }
 
 pub async fn save_file(pool: &Pool, analysis_id: i64, file_path: String) -> Result<i64, AppError> {
-    let id = pool.get().await?.interact(move |conn| {
-        conn.execute(
-            "INSERT INTO files (analysis_id, file_path) VALUES (?1, ?2)",
-            params![analysis_id, file_path],
-        )?;
-        Ok::<_, rusqlite::Error>(conn.last_insert_rowid())
-    }).await??;
+    let id = pool
+        .get()
+        .await?
+        .interact(move |conn| {
+            conn.execute(
+                "INSERT INTO files (analysis_id, file_path) VALUES (?1, ?2)",
+                params![analysis_id, file_path],
+            )?;
+            Ok::<_, rusqlite::Error>(conn.last_insert_rowid())
+        })
+        .await??;
     Ok(id)
 }
 
