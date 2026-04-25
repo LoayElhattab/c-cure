@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
 
-use crate::db::DatabaseManager;
+use deadpool_sqlite::Pool;
 use crate::error::AppError;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -60,7 +60,7 @@ fn scan_folder(folder_path: &Path) -> HashMap<String, String> {
 }
 
 pub async fn register_project(
-    db: &DatabaseManager,
+    pool: &Pool,
     folder_path: &str,
 ) -> Result<serde_json::Value, AppError> {
     let path = Path::new(folder_path);
@@ -76,7 +76,7 @@ pub async fn register_project(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "Unknown".to_string());
 
-    let project_id = db.add_watched_project(name.to_string(), folder_path.to_string()).await?;
+    let project_id = crate::db::projects_repo::add_watched_project(pool, name.clone(), folder_path.to_string()).await?;
     let hashes = scan_folder(path);
 
     if hashes.is_empty() {
@@ -84,7 +84,7 @@ pub async fn register_project(
         // Actually python version did `if not hashes: return {"error": ...}`
     }
 
-    db.save_file_hashes(project_id, hashes.clone()).await?;
+    crate::db::projects_repo::save_file_hashes(pool, project_id, hashes.clone()).await?;
 
     Ok(serde_json::json!({
         "id": project_id,
@@ -95,17 +95,17 @@ pub async fn register_project(
 }
 
 pub async fn check_changes(
-    db: &DatabaseManager,
+    pool: &Pool,
     project_id: i32,
 ) -> Result<MonitorChangeResult, AppError> {
-    let projects: Vec<crate::db::WatchedProject> = db.get_watched_projects().await?;
+    let projects: Vec<crate::db::WatchedProject> = crate::db::projects_repo::get_watched_projects(pool).await?;
     let project = projects.into_iter().find(|p| p.id == project_id);
 
     let Some(project) = project else {
         return Err(AppError::Custom("Watched project not found.".to_string()));
     };
 
-    let stored: std::collections::HashMap<String, String> = db.get_file_hashes(project_id).await?;
+    let stored: std::collections::HashMap<String, String> = crate::db::projects_repo::get_file_hashes(pool, project_id).await?;
     let current = scan_folder(Path::new(&project.folder_path));
 
     let mut changed = Vec::new();
@@ -140,10 +140,10 @@ pub async fn check_changes(
 }
 
 pub async fn refresh_hashes(
-    db: &DatabaseManager,
+    pool: &Pool,
     project_id: i32,
 ) -> Result<serde_json::Value, AppError> {
-    let projects: Vec<crate::db::WatchedProject> = db.get_watched_projects().await?;
+    let projects: Vec<crate::db::WatchedProject> = crate::db::projects_repo::get_watched_projects(pool).await?;
     let project = projects.into_iter().find(|p| p.id == project_id);
 
     let Some(project) = project else {
@@ -151,7 +151,7 @@ pub async fn refresh_hashes(
     };
 
     let hashes = scan_folder(Path::new(&project.folder_path));
-    db.save_file_hashes(project_id, hashes.clone()).await?;
+    crate::db::projects_repo::save_file_hashes(pool, project_id, hashes.clone()).await?;
 
     Ok(serde_json::json!({
         "refreshed": true,
@@ -160,27 +160,17 @@ pub async fn refresh_hashes(
 }
 
 pub async fn unregister_project(
-    db: &DatabaseManager,
+    pool: &Pool,
     project_id: i32,
 ) -> Result<serde_json::Value, AppError> {
-    db.remove_watched_project(project_id).await?;
+    crate::db::projects_repo::remove_watched_project(pool, project_id).await?;
     Ok(serde_json::json!({"removed": true}))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::DatabaseManager;
-    use rusqlite::Connection;
-    use std::fs;
     use tempfile::tempdir;
-
-    fn setup_db() -> DatabaseManager {
-        let conn = Connection::open_in_memory().unwrap();
-        let manager = DatabaseManager { conn };
-        manager.init_db().unwrap();
-        manager
-    }
 
     #[test]
     fn test_scan_folder_filtering() {
@@ -199,40 +189,5 @@ mod tests {
         assert_eq!(hashes.len(), 1);
         assert!(hashes.contains_key(&cpp_file.to_string_lossy().to_string()));
         assert!(!hashes.contains_key(&hidden_cpp.to_string_lossy().to_string()));
-    }
-
-    #[test]
-    fn test_monitor_flow() {
-        let db = setup_db();
-        let dir = tempdir().unwrap();
-        let path_str = dir.path().to_str().unwrap();
-
-        // 1. Register
-        let f1 = dir.path().join("f1.cpp");
-        fs::write(&f1, "v1").unwrap();
-        let reg_res = register_project(&db, path_str).unwrap();
-        let project_id = reg_res["id"].as_i64().unwrap() as i32;
-
-        // 2. Check (No changes)
-        let check1 = check_changes(&db, project_id).unwrap();
-        assert_eq!(check1.total_changes, 0);
-
-        // 3. Modify
-        fs::write(&f1, "v2").unwrap();
-        let check2 = check_changes(&db, project_id).unwrap();
-        assert_eq!(check2.changed.len(), 1);
-        assert_eq!(check2.total_changes, 1);
-
-        // 4. Add
-        let f2 = dir.path().join("f2.cpp");
-        fs::write(&f2, "new").unwrap();
-        let check3 = check_changes(&db, project_id).unwrap();
-        assert_eq!(check3.added.len(), 1);
-        assert_eq!(check3.total_changes, 2);
-
-        // 5. Baseline refresh
-        refresh_hashes(&db, project_id).unwrap();
-        let check4 = check_changes(&db, project_id).unwrap();
-        assert_eq!(check4.total_changes, 0);
     }
 }

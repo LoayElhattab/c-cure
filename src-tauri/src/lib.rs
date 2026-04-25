@@ -9,10 +9,9 @@ pub mod report;
 use reqwest::Client;
 use std::path::PathBuf;
 use tauri::Manager;
-use tokio::sync::Mutex;
 
 pub struct AppState {
-    pub db: Mutex<db::DatabaseManager>,
+    pub pool: deadpool_sqlite::Pool,
     pub reqwest_client: Client,
     pub app_data_dir: PathBuf,
 }
@@ -31,12 +30,12 @@ pub fn run() {
                 .ok()
                 .and_then(|exe| exe.parent().map(|p| p.join("backend").join("ccure.db")));
 
-            let db_manager = tauri::async_runtime::block_on(async {
-                db::DatabaseManager::new(&app_data_dir, old_db_path.as_deref()).await
-            }).expect("Failed to initialize database");
+            let pool = tauri::async_runtime::block_on(async {
+                db::create_pool(&app_data_dir, old_db_path.as_deref()).await
+            }).expect("Failed to initialize database pool");
 
             app.manage(AppState {
-                db: Mutex::new(db_manager),
+                pool,
                 reqwest_client: Client::builder()
                     .danger_accept_invalid_certs(true) // For local Kaggle ngrok
                     .build()
