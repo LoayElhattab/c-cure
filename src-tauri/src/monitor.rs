@@ -59,7 +59,7 @@ fn scan_folder(folder_path: &Path) -> HashMap<String, String> {
     hashes
 }
 
-pub fn register_project(
+pub async fn register_project(
     db: &DatabaseManager,
     folder_path: &str,
 ) -> Result<serde_json::Value, AppError> {
@@ -76,7 +76,7 @@ pub fn register_project(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "Unknown".to_string());
 
-    let project_id = db.add_watched_project(&name, folder_path)?;
+    let project_id = db.add_watched_project(name.to_string(), folder_path.to_string()).await?;
     let hashes = scan_folder(path);
 
     if hashes.is_empty() {
@@ -84,7 +84,7 @@ pub fn register_project(
         // Actually python version did `if not hashes: return {"error": ...}`
     }
 
-    db.save_file_hashes(project_id, &hashes)?;
+    db.save_file_hashes(project_id, hashes.clone()).await?;
 
     Ok(serde_json::json!({
         "id": project_id,
@@ -94,18 +94,18 @@ pub fn register_project(
     }))
 }
 
-pub fn check_changes(
+pub async fn check_changes(
     db: &DatabaseManager,
     project_id: i32,
 ) -> Result<MonitorChangeResult, AppError> {
-    let projects = db.get_watched_projects()?;
+    let projects: Vec<crate::db::WatchedProject> = db.get_watched_projects().await?;
     let project = projects.into_iter().find(|p| p.id == project_id);
 
     let Some(project) = project else {
         return Err(AppError::Custom("Watched project not found.".to_string()));
     };
 
-    let stored = db.get_file_hashes(project_id)?;
+    let stored: std::collections::HashMap<String, String> = db.get_file_hashes(project_id).await?;
     let current = scan_folder(Path::new(&project.folder_path));
 
     let mut changed = Vec::new();
@@ -121,7 +121,7 @@ pub fn check_changes(
     }
 
     for path in stored.keys() {
-        if !current.contains_key(path) {
+        if !current.contains_key(&path.clone()) {
             deleted.push(path.clone());
         }
     }
@@ -139,11 +139,11 @@ pub fn check_changes(
     })
 }
 
-pub fn refresh_hashes(
+pub async fn refresh_hashes(
     db: &DatabaseManager,
     project_id: i32,
 ) -> Result<serde_json::Value, AppError> {
-    let projects = db.get_watched_projects()?;
+    let projects: Vec<crate::db::WatchedProject> = db.get_watched_projects().await?;
     let project = projects.into_iter().find(|p| p.id == project_id);
 
     let Some(project) = project else {
@@ -151,7 +151,7 @@ pub fn refresh_hashes(
     };
 
     let hashes = scan_folder(Path::new(&project.folder_path));
-    db.save_file_hashes(project_id, &hashes)?;
+    db.save_file_hashes(project_id, hashes.clone()).await?;
 
     Ok(serde_json::json!({
         "refreshed": true,
@@ -159,11 +159,11 @@ pub fn refresh_hashes(
     }))
 }
 
-pub fn unregister_project(
+pub async fn unregister_project(
     db: &DatabaseManager,
     project_id: i32,
 ) -> Result<serde_json::Value, AppError> {
-    db.remove_watched_project(project_id)?;
+    db.remove_watched_project(project_id).await?;
     Ok(serde_json::json!({"removed": true}))
 }
 

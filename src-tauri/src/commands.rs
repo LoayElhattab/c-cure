@@ -32,8 +32,8 @@ pub async fn analyze_file(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "Unknown".to_string());
 
-    let analysis_id = db.save_analysis(&project_name, &file_path)?;
-    let file_id = db.save_file(analysis_id, &file_path)?;
+    let analysis_id = db.save_analysis(project_name.clone(), file_path.clone()).await?;
+    let file_id = db.save_file(analysis_id, file_path.clone()).await?;
 
     let mut results = Vec::new();
     let mut vuln_count = 0;
@@ -46,7 +46,7 @@ pub async fn analyze_file(
         result.start_line = Some(fn_info.start_line);
         result.end_line = Some(fn_info.end_line);
 
-        db.save_function(file_id, &result)?;
+        db.save_function(file_id, result.clone()).await?;
         if result.verdict == "vulnerable" {
             vuln_count += 1;
         }
@@ -115,13 +115,13 @@ pub async fn analyze_folder(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "Unknown".to_string());
 
-    let analysis_id = db.save_analysis(&project_name, &folder_path)?;
+    let analysis_id = db.save_analysis(project_name.clone(), folder_path.clone()).await?;
 
     let mut all_functions = Vec::new();
     let mut total_vuln = 0;
 
     for file_path in &cpp_files {
-        let file_id = db.save_file(analysis_id, file_path)?;
+        let file_id = db.save_file(analysis_id, file_path.clone()).await?;
         if let Ok(functions) = crate::parser::extract_functions(file_path) {
             for fn_info in functions {
                 let mut result =
@@ -132,7 +132,7 @@ pub async fn analyze_folder(
                 result.start_line = Some(fn_info.start_line);
                 result.end_line = Some(fn_info.end_line);
 
-                db.save_function(file_id, &result)?;
+                db.save_function(file_id, result.clone()).await?;
                 if result.verdict == "vulnerable" {
                     total_vuln += 1;
                 }
@@ -157,7 +157,7 @@ pub async fn get_history(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<AnalysisSummary>, AppError> {
     let db = state.db.lock().await;
-    db.get_all_analyses()
+    db.get_all_analyses().await
 }
 
 #[tauri::command]
@@ -166,7 +166,7 @@ pub async fn get_report(
     analysis_id: i32,
 ) -> Result<Report, AppError> {
     let db = state.db.lock().await;
-    db.get_report(analysis_id)?
+    db.get_report(analysis_id).await?
         .ok_or_else(|| AppError::Custom("Report not found".into()))
 }
 
@@ -176,19 +176,19 @@ pub async fn delete_analysis(
     analysis_id: i32,
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
-    db.delete_analysis(analysis_id)
+    db.delete_analysis(analysis_id).await
 }
 
 #[tauri::command]
 pub async fn get_statistics(state: tauri::State<'_, AppState>) -> Result<StatisticsData, AppError> {
     let db = state.db.lock().await;
-    db.get_statistics()
+    db.get_statistics().await
 }
 
 #[tauri::command]
 pub async fn get_vuln_count(state: tauri::State<'_, AppState>) -> Result<Value, AppError> {
     let db = state.db.lock().await;
-    let count = db.get_vuln_count()?;
+    let count = db.get_vuln_count().await?;
     Ok(serde_json::json!({ "count": count }))
 }
 
@@ -232,7 +232,7 @@ pub async fn generate_pdf(
 ) -> Result<Value, AppError> {
     let db = state.db.lock().await;
     let report = db
-        .get_report(analysis_id as i32)?
+        .get_report(analysis_id as i32).await?
         .ok_or_else(|| AppError::Custom("Report not found".into()))?;
     let path = crate::report::generate_pdf(&report)?;
     Ok(serde_json::json!({ "path": path }))
@@ -249,7 +249,7 @@ pub async fn monitor_register(
     folder_path: String,
 ) -> Result<Value, AppError> {
     let db = state.db.lock().await;
-    crate::monitor::register_project(&db, &folder_path)
+    crate::monitor::register_project(&db, &folder_path).await
 }
 
 #[tauri::command]
@@ -257,7 +257,7 @@ pub async fn monitor_list(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<WatchedProject>, AppError> {
     let db = state.db.lock().await;
-    db.get_watched_projects()
+    db.get_watched_projects().await
 }
 
 #[tauri::command]
@@ -266,7 +266,7 @@ pub async fn monitor_check(
     project_id: i32,
 ) -> Result<crate::monitor::MonitorChangeResult, AppError> {
     let db = state.db.lock().await;
-    crate::monitor::check_changes(&db, project_id)
+    crate::monitor::check_changes(&db, project_id).await
 }
 
 #[tauri::command]
@@ -275,7 +275,7 @@ pub async fn monitor_refresh(
     project_id: i32,
 ) -> Result<Value, AppError> {
     let db = state.db.lock().await;
-    crate::monitor::refresh_hashes(&db, project_id)
+    crate::monitor::refresh_hashes(&db, project_id).await
 }
 
 #[tauri::command]
@@ -284,5 +284,5 @@ pub async fn monitor_remove(
     project_id: i32,
 ) -> Result<Value, AppError> {
     let db = state.db.lock().await;
-    crate::monitor::unregister_project(&db, project_id)
+    crate::monitor::unregister_project(&db, project_id).await
 }

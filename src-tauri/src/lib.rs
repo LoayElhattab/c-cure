@@ -31,8 +31,9 @@ pub fn run() {
                 .ok()
                 .and_then(|exe| exe.parent().map(|p| p.join("backend").join("ccure.db")));
 
-            let db_manager = db::DatabaseManager::new(&app_data_dir, old_db_path.as_deref())
-                .expect("Failed to initialize database");
+            let db_manager = tauri::async_runtime::block_on(async {
+                db::DatabaseManager::new(&app_data_dir, old_db_path.as_deref()).await
+            }).expect("Failed to initialize database");
 
             app.manage(AppState {
                 db: Mutex::new(db_manager),
