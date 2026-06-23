@@ -97,7 +97,7 @@ enum AlertSeverity {
 /// Returns the `AlertSeverity` for a known CWE string, or `None` for Low/Medium.
 fn cwe_alert_severity(cwe: &str) -> Option<AlertSeverity> {
     match cwe {
-        "CWE-787"                    => Some(AlertSeverity::Critical),
+        "CWE-787" | "CWE-89"          => Some(AlertSeverity::Critical),
         "CWE-125" | "CWE-415" | "CWE-476" => Some(AlertSeverity::High),
         _ => None,
     }

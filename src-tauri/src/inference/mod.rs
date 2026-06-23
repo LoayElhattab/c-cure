@@ -35,6 +35,8 @@ pub fn get_cwe_info(cwe: &str) -> (Option<String>, Option<String>) {
         "CWE-369" => (Some("Divide By Zero".into()), Some("Medium".into())),
         "CWE-415" => (Some("Double Free".into()), Some("High".into())),
         "CWE-476" => (Some("NULL Pointer Dereference".into()), Some("High".into())),
+        "CWE-79" => (Some("Cross-Site Scripting".into()), Some("Medium".into())),
+        "CWE-89" => (Some("SQL Injection".into()), Some("Critical".into())),
         _ => (Some("Unknown".into()), Some("Unknown".into())),
     }
 }

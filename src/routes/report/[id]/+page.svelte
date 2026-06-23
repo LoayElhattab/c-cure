@@ -75,14 +75,14 @@
       style="background:var(--surface);border-bottom:1px solid var(--border)"
     >
       <div class="flex items-center gap-3">
-        <div class="skeleton h-6 w-16 rounded-lg"></div>
+        <div class="skeleton h-6 w-16 rounded-none"></div>
         <div class="skeleton h-3 w-1 rounded"></div>
         <div class="skeleton h-4 w-36 rounded"></div>
         <div class="skeleton h-3 w-28 rounded hidden sm:block"></div>
       </div>
       <div class="flex items-center gap-2">
-        <div class="skeleton h-7 w-24 rounded-lg"></div>
-        <div class="skeleton h-7 w-28 rounded-lg"></div>
+        <div class="skeleton h-7 w-24 rounded-none"></div>
+        <div class="skeleton h-7 w-28 rounded-none"></div>
       </div>
     </header>
 
@@ -91,7 +91,7 @@
       <div class="flex items-center gap-8">
         <!-- Ring -->
         <div
-          class="skeleton rounded-full shrink-0"
+          class="skeleton rounded-none shrink-0"
           style="width:132px;height:132px"
         ></div>
         <!-- KPI cards -->
@@ -115,11 +115,11 @@
               <div class="flex items-center gap-3">
                 <div class="skeleton h-3 w-14 rounded shrink-0"></div>
                 <div
-                  class="flex-1 h-1.5 rounded-full overflow-hidden"
+                  class="flex-1 h-1.5 rounded-none overflow-hidden"
                   style="background:var(--border)"
                 >
                   <div
-                    class="h-full rounded-full skeleton"
+                    class="h-full rounded-none skeleton"
                     style="width:{w}%"
                   ></div>
                 </div>
@@ -134,7 +134,7 @@
           <div class="space-y-5">
             {#each Array(3) as _, i}
               <div class="flex items-start gap-3">
-                <div class="skeleton w-5 h-5 rounded-lg shrink-0"></div>
+                <div class="skeleton w-5 h-5 rounded-none shrink-0"></div>
                 <div class="flex-1">
                   <div class="flex items-center gap-2 mb-1.5">
                     <div class="skeleton h-3 w-16 rounded"></div>
@@ -160,7 +160,7 @@
             style="border-bottom:{i < 3 ? '1px solid var(--border)' : 'none'}"
           >
             <div
-              class="skeleton w-1.5 rounded-full shrink-0"
+              class="skeleton w-1.5 rounded-none shrink-0"
               style="height:36px"
             ></div>
             <div class="flex-1">
@@ -178,7 +178,7 @@
 
       <!-- CTA button area -->
       <div class="flex flex-col items-center gap-3 pb-4">
-        <div class="skeleton h-10 w-44 rounded-xl"></div>
+        <div class="skeleton h-10 w-44 rounded-none"></div>
         <div class="skeleton h-2.5 w-56 rounded"></div>
       </div>
     </div>
@@ -337,11 +337,11 @@
                     style="color:{col}">{sev}</span
                   >
                   <div
-                    class="flex-1 h-1.5 rounded-full overflow-hidden"
+                    class="flex-1 h-1.5 rounded-none overflow-hidden"
                     style="background:var(--border)"
                   >
                     <div
-                      class="h-full rounded-full"
+                      class="h-full rounded-none"
                       style="width:{mounted
                         ? Math.round((count / maxSevCount) * 100)
                         : 0}%;
@@ -379,7 +379,7 @@
                   SEVERITY_COLORS[item.severity] ?? "var(--muted)"}
                 <div class="flex items-start gap-3">
                   <div
-                    class="w-5 h-5 rounded-lg flex items-center justify-center shrink-0 font-bold tabular-nums"
+                    class="w-5 h-5 rounded-none flex items-center justify-center shrink-0 font-bold tabular-nums"
                     style="background:{color}18;color:{color};font-size:10px"
                   >
                     {i + 1}
@@ -438,7 +438,7 @@
                 : 'none'}"
             >
               <div
-                class="w-1.5 h-9 rounded-full shrink-0"
+                class="w-1.5 h-9 rounded-none shrink-0"
                 style="background:{color}"
               ></div>
               <div class="flex-1 min-w-0">
@@ -474,7 +474,7 @@
       <div class="text-center pb-4 animate-fade-up stagger-4">
         <a
           href="/report/{$page.params.id}/detail"
-          class="btn-primary inline-flex gap-2 rounded-xl"
+          class="btn-primary inline-flex gap-2 rounded-none"
           style="padding:10px 24px;font-size:13px;height:auto;box-shadow:0 0 24px var(--accent-glow)"
         >
           View Full Report

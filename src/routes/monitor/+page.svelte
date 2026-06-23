@@ -4,7 +4,11 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import { FolderOpen, Radio, Square, XCircle } from "lucide-svelte";
-  import { success as toastSuccess, error as toastError, info as toastInfo } from "$lib/utils/toast";
+  import {
+    success as toastSuccess,
+    error as toastError,
+    info as toastInfo,
+  } from "$lib/utils/toast";
 
   type MonitoredFolder = {
     id: number;
@@ -25,24 +29,42 @@
     void loadMonitoredPaths();
 
     // Listen to background monitor scan events
-    const unlistenStart = listen<{ path: string }>("monitor-scan-start", (event) => {
-      toastInfo(`File change detected: Scanning ${folderName(event.payload.path)}...`);
-    });
-    const unlistenSuccess = listen<{ path: string; vuln_count: number; total_functions: number }>("monitor-scan-success", (event) => {
+    const unlistenStart = listen<{ path: string }>(
+      "monitor-scan-start",
+      (event) => {
+        toastInfo(
+          `File change detected: Scanning ${folderName(event.payload.path)}...`,
+        );
+      },
+    );
+    const unlistenSuccess = listen<{
+      path: string;
+      vuln_count: number;
+      total_functions: number;
+    }>("monitor-scan-success", (event) => {
       if (event.payload.vuln_count > 0) {
-        toastError(`Scan complete: Found ${event.payload.vuln_count} vulnerabilities in ${folderName(event.payload.path)}.`);
+        toastError(
+          `Scan complete: Found ${event.payload.vuln_count} vulnerabilities in ${folderName(event.payload.path)}.`,
+        );
       } else {
-        toastSuccess(`Scan complete: No vulnerabilities found in ${folderName(event.payload.path)}.`);
+        toastSuccess(
+          `Scan complete: No vulnerabilities found in ${folderName(event.payload.path)}.`,
+        );
       }
     });
-    const unlistenError = listen<{ path: string; error: string }>("monitor-scan-error", (event) => {
-      toastError(`Scan failed for ${folderName(event.payload.path)}: ${event.payload.error}`);
-    });
+    const unlistenError = listen<{ path: string; error: string }>(
+      "monitor-scan-error",
+      (event) => {
+        toastError(
+          `Scan failed for ${folderName(event.payload.path)}: ${event.payload.error}`,
+        );
+      },
+    );
 
     return () => {
-      unlistenStart.then(fn => fn());
-      unlistenSuccess.then(fn => fn());
-      unlistenError.then(fn => fn());
+      unlistenStart.then((fn) => fn());
+      unlistenSuccess.then((fn) => fn());
+      unlistenError.then((fn) => fn());
     };
   });
 
@@ -69,17 +91,26 @@
     error = "";
 
     try {
-      const dbProjects = await invoke<{ id: number; name: string; folder_path: string; registered_at: string }[]>("monitor_list");
+      const dbProjects = await invoke<
+        {
+          id: number;
+          name: string;
+          folder_path: string;
+          registered_at: string;
+        }[]
+      >("monitor_list");
       const activePaths = await invoke<string[]>("get_monitored_paths");
 
-      const activeSet = new Set(activePaths.map(p => formatPath(p).toLowerCase()));
+      const activeSet = new Set(
+        activePaths.map((p) => formatPath(p).toLowerCase()),
+      );
 
-      monitoredFolders = dbProjects.map(project => ({
+      monitoredFolders = dbProjects.map((project) => ({
         id: project.id,
         name: project.name,
         path: project.folder_path,
         registeredAt: project.registered_at,
-        active: activeSet.has(formatPath(project.folder_path).toLowerCase())
+        active: activeSet.has(formatPath(project.folder_path).toLowerCase()),
       }));
     } catch (err) {
       error = `Failed to load monitored folders: ${errorMessage(err)}`;
@@ -127,8 +158,10 @@
   class="min-h-screen px-6 py-8"
   style="background:var(--bg);color:var(--text)"
 >
-  <div class="mx-auto max-w-5xl">
-    <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+  <div class="mx-auto max-w-6xl">
+    <div
+      class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+    >
       <div>
         <h1 class="text-lg font-semibold">Automated File Monitoring</h1>
         <p class="mt-0.5 text-xs" style="color:var(--muted)">
@@ -139,8 +172,7 @@
       <button
         onclick={handleAddFolder}
         disabled={actionPath !== null}
-        class="gradient-bg flex h-9 items-center justify-center gap-2 rounded-lg px-4 text-xs font-medium transition-opacity disabled:opacity-60"
-        style="color:#fff"
+        class="btn-primary"
       >
         <FolderOpen size={14} />
         Add Folder to Watch

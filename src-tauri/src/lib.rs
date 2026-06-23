@@ -3,7 +3,7 @@ pub mod db;
 pub mod error;
 pub mod exports;
 pub mod inference;
-pub mod monitor;
+
 pub mod monitor_service;
 pub mod parser;
 pub mod services;
@@ -80,15 +80,11 @@ pub fn run() {
             commands::get_report,
             commands::get_functions_count,
             commands::get_functions_page,
+            commands::search_functions,
             commands::get_statistics,
-            commands::get_vuln_count,
             commands::extract_functions,
             commands::check_api,
-            commands::monitor_register,
             commands::monitor_list,
-            commands::monitor_check,
-            commands::monitor_refresh,
-            commands::monitor_remove,
             commands::start_monitoring,
             commands::stop_monitoring,
             commands::get_monitored_paths,
@@ -98,9 +94,7 @@ pub fn run() {
             commands::export_report,
             commands::generate_pdf,
             commands::export_sarif,
-            commands::export_csv,
-            commands::generate_vulnerability_fix,
-            commands::open_path
+            commands::export_csv
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

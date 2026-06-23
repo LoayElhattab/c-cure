@@ -158,9 +158,7 @@ pub async fn get_analysis_summary(
             Ok(CweHit {
                 cwe: row.get(0)?,
                 cwe_name: row.get(1)?,
-                cert_id: None,
                 asvs_id: None,
-                misra_id: None,
                 severity: row.get(2)?,
                 count: row.get::<_, i64>(3)? as u32,
             }
@@ -209,9 +207,7 @@ pub async fn get_analysis_summary(
                 verdict: row.get(3)?,
                 cwe: row.get(4)?,
                 cwe_name: row.get(5)?,
-                cert_id: None,
                 asvs_id: None,
-                misra_id: None,
                 severity: row.get(6)?,
                 confidence: row.get(7)?,
                 start_line: row.get(8)?,
@@ -286,9 +282,7 @@ pub async fn get_report(pool: &DbPool, analysis_id: i32) -> Result<Option<Report
                     verdict: row.get(3)?,
                     cwe: row.get(4)?,
                     cwe_name: row.get(5)?,
-                    cert_id: None,
                     asvs_id: None,
-                    misra_id: None,
                     severity: row.get(6)?,
                     confidence: row.get(7)?,
                     start_line: row.get(8)?,
@@ -402,9 +396,7 @@ pub async fn get_vulnerability_report(
             Ok(CweHit {
                 cwe: row.get(0)?,
                 cwe_name: row.get(1)?,
-                cert_id: None,
                 asvs_id: None,
-                misra_id: None,
                 severity: row.get(2)?,
                 count: row.get::<_, i64>(3)? as u32,
             }
@@ -453,9 +445,7 @@ pub async fn get_vulnerability_report(
                     verdict: row.get(4)?,
                     cwe: row.get(5)?,
                     cwe_name: row.get(6)?,
-                    cert_id: None,
                     asvs_id: None,
-                    misra_id: None,
                     severity: row.get(7)?,
                     confidence: row.get(8)?,
                     start_line: row.get(9)?,
@@ -632,9 +622,7 @@ pub async fn get_functions_page(
                 verdict: row.get(3)?,
                 cwe: row.get(4)?,
                 cwe_name: row.get(5)?,
-                cert_id: None,
                 asvs_id: None,
-                misra_id: None,
                 severity: row.get(6)?,
                 confidence: row.get(7)?,
                 start_line: row.get(8)?,
@@ -642,6 +630,104 @@ pub async fn get_functions_page(
                 file_path: row.get(10)?,
             }
             .with_compliance())
+        })?;
+
+        let mut functions = Vec::new();
+        for r in rows {
+            functions.push(r?);
+        }
+
+        Ok(PagedFunctions {
+            total: total as u64,
+            limit,
+            offset,
+            functions,
+        })
+    })
+    .await
+}
+
+/// Returns a filtered, sorted, and paginated list of functions for an analysis.
+pub async fn search_functions_page(
+    pool: &DbPool,
+    analysis_id: i32,
+    search_term: Option<String>,
+    verdict_filter: Option<String>,
+    sort_by: Option<String>,
+    limit: u32,
+    offset: u32,
+) -> Result<PagedFunctions, crate::error::AppError> {
+    pool.with_conn(move |conn| {
+        let mut filters = Vec::new();
+        filters.push("fi.analysis_id = ?".to_string());
+        let mut params_vec: Vec<duckdb::types::Value> = vec![duckdb::types::Value::Int(analysis_id)];
+
+        if let Some(ref term) = search_term {
+            if !term.trim().is_empty() {
+                filters.push(
+                    "(LOWER(f.function_name) LIKE ? OR LOWER(f.cwe) LIKE ? OR LOWER(f.cwe_name) LIKE ? OR LOWER(fi.file_path) LIKE ?)".to_string()
+                );
+                let like_term = format!("%{}%", term.to_lowercase());
+                params_vec.push(duckdb::types::Value::Text(like_term.clone()));
+                params_vec.push(duckdb::types::Value::Text(like_term.clone()));
+                params_vec.push(duckdb::types::Value::Text(like_term.clone()));
+                params_vec.push(duckdb::types::Value::Text(like_term));
+            }
+        }
+
+        if let Some(ref v) = verdict_filter {
+            if v != "all" {
+                filters.push("f.verdict = ?".to_string());
+                params_vec.push(duckdb::types::Value::Text(v.clone()));
+            }
+        }
+
+        let where_clause = filters.join(" AND ");
+
+        let count_query = format!(
+            "SELECT COUNT(*) FROM functions f JOIN files fi ON f.file_id = fi.id WHERE {}",
+            where_clause
+        );
+
+        let total: i64 = conn.query_row_and_then(&count_query, duckdb::params_from_iter(params_vec.iter()), |row| row.get(0))?;
+
+        let order_clause = match sort_by.as_deref() {
+            Some("severity") => "CASE f.severity WHEN 'Critical' THEN 4 WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 WHEN 'Low' THEN 1 ELSE 0 END DESC, fi.id ASC, f.id ASC",
+            Some("name") => "f.function_name ASC, fi.id ASC, f.id ASC",
+            Some("line") => "COALESCE(f.start_line, 0) ASC, fi.id ASC, f.id ASC",
+            _ => "fi.id ASC, f.id ASC",
+        };
+
+        let data_query = format!(
+            "SELECT f.id, f.function_name, f.code, f.verdict, f.cwe, f.cwe_name, f.severity, f.confidence, f.start_line, f.end_line, fi.file_path 
+             FROM functions f JOIN files fi ON f.file_id = fi.id 
+             WHERE {} 
+             ORDER BY {} 
+             LIMIT ? OFFSET ?",
+            where_clause, order_clause
+        );
+
+        let mut data_params = params_vec;
+        data_params.push(duckdb::types::Value::UInt(limit));
+        data_params.push(duckdb::types::Value::UInt(offset));
+
+        let mut stmt = conn.prepare(&data_query)?;
+        
+        let rows = stmt.query_map(duckdb::params_from_iter(data_params.iter()), |row| {
+            Ok(FunctionRow {
+                id: row.get(0)?,
+                function_name: row.get(1)?,
+                code: row.get(2)?,
+                verdict: row.get(3)?,
+                cwe: row.get(4)?,
+                cwe_name: row.get(5)?,
+                asvs_id: None,
+                severity: row.get(6)?,
+                confidence: row.get(7)?,
+                start_line: row.get(8)?,
+                end_line: row.get(9)?,
+                file_path: row.get(10)?,
+            }.with_compliance())
         })?;
 
         let mut functions = Vec::new();

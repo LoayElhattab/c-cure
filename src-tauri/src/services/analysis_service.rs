@@ -153,24 +153,3 @@ pub async fn analyze_folder_service(
         functions: all_functions,
     })
 }
-
-pub async fn generate_vulnerability_fix_service(
-    client: Client,
-    url: String,
-    code: String,
-    cwe: String,
-) -> Result<String, AppError> {
-    if url.is_empty() && std::env::var("MOCK_API").unwrap_or_default() != "true" {
-        return Err(AppError::Custom(
-            "Kaggle API URL not configured".to_string(),
-        ));
-    }
-
-    let provider = get_provider(client, url);
-    let fix = provider
-        .generate_fix(&code, &cwe)
-        .await
-        .map_err(|e| AppError::Custom(format!("Failed to generate fix: {}", e)))?;
-
-    Ok(fix)
-}

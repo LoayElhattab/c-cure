@@ -34,9 +34,9 @@
     {#each navLinks as link (link.href)}
       <a
         href={link.href}
-        class="nav-link {$page.url.pathname === link.href ||
+        class="nav-link font-mono uppercase tracking-wider text-[10px] {$page.url.pathname === link.href ||
         ($page.url.pathname.startsWith(link.href) && link.href !== '/')
-          ? 'active'
+          ? 'active border-b-2 border-[#FF8C7A] !bg-transparent !shadow-none'
           : ''}"
       >
         <svelte:component this={link.icon} size={13} />
@@ -48,7 +48,7 @@
 
     <a
       href="/settings"
-      class="nav-link {$page.url.pathname === '/settings' ? 'active' : ''}"
+      class="nav-link font-mono uppercase tracking-wider text-[10px] {$page.url.pathname === '/settings' ? 'active border-b-2 border-[#FF8C7A] !bg-transparent !shadow-none' : ''}"
     >
       <Settings size={13} />
       Settings
@@ -63,17 +63,15 @@
   >
     {#each $toasts as t (t.id)}
       <div
-        class="pointer-events-auto px-4 py-3 rounded-xl text-xs font-medium shadow-2xl
-        flex items-center gap-3 min-w-[240px] max-w-xs animate-fade-up"
+        class="pointer-events-auto px-4 py-3 rounded-none text-xs font-mono uppercase tracking-wider shadow-2xl
+        flex items-center gap-3 min-w-[240px] max-w-xs animate-fade-up border"
         style={t.type === "success"
-          ? "background:#0a2318;border:1px solid #166534;color:#86efac"
+          ? "background:#0a2318;border-color:#166534;color:#86efac"
           : t.type === "error"
-            ? "background:#2a0a0a;border:1px solid #991b1b;color:#fca5a5"
-            : "background:var(--surface-2);border:1px solid var(--border);color:var(--muted)"}
+            ? "background:#2a0a0a;border-color:#991b1b;color:#fca5a5"
+            : "background:var(--surface-2);border-color:var(--border);color:var(--muted)"}
       >
-        <span
-          >{t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}</span
-        >
+        <span>{t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}</span>
         {t.message}
       </div>
     {/each}

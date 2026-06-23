@@ -81,7 +81,7 @@
                     class="text-xs font-semibold uppercase tracking-wider mb-1"
                     style="color:var(--muted)"
                 >
-                    Kaggle API
+                    Inference Service URL
                 </p>
                 <p class="text-xs mb-4" style="color:var(--subtle)">
                     Paste your ngrok URL from the running Kaggle notebook.
@@ -119,7 +119,7 @@
                     About
                 </p>
                 <p class="text-xs" style="color:var(--subtle)">
-                    C-Cure · v1.0.0 · Demo · FCIS Graduation Project 2026
+                    C-Cure · v0.1.0 · Demo · FCIS Graduation Project 2026
                     <br />
                     Under supervision of Dr. Alshaimaa Abo-Alian & T.A. Alaa Prince
                 </p>

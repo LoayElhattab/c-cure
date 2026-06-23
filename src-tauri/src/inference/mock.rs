@@ -27,9 +27,7 @@ impl InferenceProvider for MockProvider {
                     verdict: "vulnerable".into(),
                     cwe: Some("CWE-787".into()),
                     cwe_name,
-                    cert_id: None,
                     asvs_id: None,
-                    misra_id: None,
                     severity,
                     confidence: Some(0.85),
                     start_line: None,
@@ -44,9 +42,7 @@ impl InferenceProvider for MockProvider {
                     verdict: "safe".into(),
                     cwe: None,
                     cwe_name: None,
-                    cert_id: None,
                     asvs_id: None,
-                    misra_id: None,
                     severity: None,
                     confidence: Some(0.95),
                     start_line: None,
@@ -56,16 +52,4 @@ impl InferenceProvider for MockProvider {
         })
     }
 
-    fn generate_fix<'a>(
-        &'a self,
-        _code: &'a str,
-        cwe: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + '_>> {
-        Box::pin(async move {
-            Ok(format!(
-                "// AI-Generated Fix for {}\n// Replace vulnerable block with secure alternative\nvoid secure_fn() {{\n    // ... fixed code ...\n}}",
-                cwe
-            ))
-        })
-    }
 }

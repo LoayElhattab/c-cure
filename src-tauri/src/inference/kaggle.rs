@@ -106,9 +106,7 @@ impl InferenceProvider for KaggleProvider {
                     verdict: "safe".into(),
                     cwe: None,
                     cwe_name: None,
-                    cert_id: None,
                     asvs_id: None,
-                    misra_id: None,
                     severity: None,
                     confidence: Some(confidence),
                     start_line: None,
@@ -129,9 +127,7 @@ impl InferenceProvider for KaggleProvider {
                 },
                 cwe: Some(output_str),
                 cwe_name: cwe_info.0,
-                cert_id: None,
                 asvs_id: None,
-                misra_id: None,
                 severity: cwe_info.1,
                 confidence: Some(confidence),
                 start_line: None,
@@ -141,43 +137,4 @@ impl InferenceProvider for KaggleProvider {
         })
     }
 
-    fn generate_fix<'a>(
-        &'a self,
-        code: &'a str,
-        cwe: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + '_>> {
-        Box::pin(async move {
-            if self.url.is_empty() {
-                return Err(anyhow::anyhow!(
-                    "Kaggle API URL not configured (check settings)"
-                ));
-            }
-
-            let body = serde_json::json!({
-                "code": code,
-                "cwe": cwe
-            });
-
-            let resp = self
-                .client
-                .post(format!("{}/fix", self.url))
-                .json(&body)
-                .timeout(std::time::Duration::from_secs(30))
-                .send()
-                .await?;
-
-            if !resp.status().is_success() {
-                return Err(anyhow::anyhow!("API returned error: {}", resp.status()));
-            }
-
-            let json: serde_json::Value = resp.json().await?;
-            let fixed_code = json
-                .get("fixed_code")
-                .and_then(|v| v.as_str())
-                .or_else(|| json.get("output").and_then(|v| v.as_str()))
-                .ok_or_else(|| anyhow::anyhow!("API response missing fixed_code field"))?;
-
-            Ok(fixed_code.to_string())
-        })
-    }
 }

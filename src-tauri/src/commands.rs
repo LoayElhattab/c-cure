@@ -1,8 +1,6 @@
 use serde_json::Value;
 
-use crate::db::{
-    AnalysisListItem, AnalysisSummary, PagedFunctions, Report, StatisticsData, WatchedProject,
-};
+use crate::db::{AnalysisListItem, AnalysisSummary, PagedFunctions, Report, StatisticsData};
 use crate::error::AppError;
 use crate::exports::pdf::ExportSettings;
 use crate::inference::AnalysisResult;
@@ -104,14 +102,30 @@ pub async fn get_functions_page(
 }
 
 #[tauri::command]
-pub async fn get_statistics(state: tauri::State<'_, AppState>) -> Result<StatisticsData, AppError> {
-    crate::db::stats_repo::get_statistics(&state.pool).await
+pub async fn search_functions(
+    state: tauri::State<'_, AppState>,
+    analysis_id: i32,
+    search_term: Option<String>,
+    verdict_filter: Option<String>,
+    sort_by: Option<String>,
+    limit: u32,
+    offset: u32,
+) -> Result<PagedFunctions, AppError> {
+    crate::db::analysis_repo::search_functions_page(
+        &state.pool,
+        analysis_id,
+        search_term,
+        verdict_filter,
+        sort_by,
+        limit,
+        offset,
+    )
+    .await
 }
 
 #[tauri::command]
-pub async fn get_vuln_count(state: tauri::State<'_, AppState>) -> Result<Value, AppError> {
-    let count = crate::db::stats_repo::get_vuln_count(&state.pool).await?;
-    Ok(serde_json::json!({ "count": count }))
+pub async fn get_statistics(state: tauri::State<'_, AppState>) -> Result<StatisticsData, AppError> {
+    crate::db::stats_repo::get_statistics(&state.pool).await
 }
 
 #[tauri::command]
@@ -181,12 +195,10 @@ pub async fn export_report(
 ) -> Result<Value, AppError> {
     match format.as_str() {
         "pdf_technical" | "pdf_executive" => {
-            let report = crate::db::analysis_repo::get_vulnerability_report(
-                &state.pool,
-                analysis_id as i32,
-            )
-            .await?
-            .ok_or_else(|| AppError::Custom("Report not found".into()))?;
+            let report =
+                crate::db::analysis_repo::get_vulnerability_report(&state.pool, analysis_id as i32)
+                    .await?
+                    .ok_or_else(|| AppError::Custom("Report not found".into()))?;
 
             let destination = PathBuf::from(&file_path);
             let settings = ExportSettings {
@@ -194,22 +206,26 @@ pub async fn export_report(
             };
             tauri::async_runtime::spawn_blocking(move || {
                 let generated_path = crate::exports::pdf::generate_pdf(&report, settings)?;
-                std::fs::copy(&generated_path, &destination).map_err(|e| {
-                    AppError::Custom(format!("Failed to save PDF export: {e}"))
-                })?;
+                std::fs::copy(&generated_path, &destination)
+                    .map_err(|e| AppError::Custom(format!("Failed to save PDF export: {e}")))?;
                 Ok::<(), AppError>(())
             })
             .await
             .map_err(|e| AppError::Custom(format!("PDF export worker failed: {e}")))??;
         }
         "sarif" => {
-            crate::exports::sarif::export_sarif(&state.pool, analysis_id, file_path.clone()).await?;
+            crate::exports::sarif::export_sarif(&state.pool, analysis_id, file_path.clone())
+                .await?;
         }
         "csv" => {
             crate::exports::csv::export_csv(&state.pool, analysis_id as i32, file_path.clone())
                 .await?;
         }
-        _ => return Err(AppError::Custom(format!("Unsupported export format: {format}"))),
+        _ => {
+            return Err(AppError::Custom(format!(
+                "Unsupported export format: {format}"
+            )))
+        }
     }
 
     Ok(serde_json::json!({ "path": file_path, "format": format }))
@@ -234,64 +250,10 @@ pub async fn export_csv(
 }
 
 #[tauri::command]
-pub async fn generate_vulnerability_fix(
-    state: tauri::State<'_, AppState>,
-    code: String,
-    cwe: String,
-) -> Result<String, AppError> {
-    let url = crate::inference::load_kaggle_url(&state.app_data_dir);
-    crate::services::analysis_service::generate_vulnerability_fix_service(
-        state.reqwest_client.clone(),
-        url,
-        code,
-        cwe,
-    )
-    .await
-}
-
-#[tauri::command]
-pub fn open_path(path: String) -> Result<(), AppError> {
-    open::that(&path).map_err(|e| AppError::Custom(e.to_string()))
-}
-
-// Consider moving these to a monitor_service in the future if they grow in complexity
-#[tauri::command]
-pub async fn monitor_register(
-    state: tauri::State<'_, AppState>,
-    folder_path: String,
-) -> Result<Value, AppError> {
-    crate::monitor::register_project(&state.pool, &folder_path).await
-}
-
-#[tauri::command]
 pub async fn monitor_list(
     state: tauri::State<'_, AppState>,
-) -> Result<Vec<WatchedProject>, AppError> {
+) -> Result<Vec<crate::db::WatchedProject>, AppError> {
     crate::db::projects_repo::get_watched_projects(&state.pool).await
-}
-
-#[tauri::command]
-pub async fn monitor_check(
-    state: tauri::State<'_, AppState>,
-    project_id: i32,
-) -> Result<crate::monitor::MonitorChangeResult, AppError> {
-    crate::monitor::check_changes(&state.pool, project_id).await
-}
-
-#[tauri::command]
-pub async fn monitor_refresh(
-    state: tauri::State<'_, AppState>,
-    project_id: i32,
-) -> Result<Value, AppError> {
-    crate::monitor::refresh_hashes(&state.pool, project_id).await
-}
-
-#[tauri::command]
-pub async fn monitor_remove(
-    state: tauri::State<'_, AppState>,
-    project_id: i32,
-) -> Result<Value, AppError> {
-    crate::monitor::unregister_project(&state.pool, project_id).await
 }
 
 #[tauri::command]

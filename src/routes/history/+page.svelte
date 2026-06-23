@@ -64,7 +64,7 @@
 
     {#if !loading && history.length > 0}
       <div
-        class="flex items-center gap-3 rounded-xl px-4 py-2.5 mb-4"
+        class="flex items-center gap-3 rounded-none px-4 py-2.5 mb-4"
         style="background:var(--surface);border:1px solid var(--border)"
       >
         <Search size={13} color="var(--muted)" />
@@ -177,14 +177,14 @@
                       <div class="flex items-center gap-2">
                         <button
                           onclick={() => cancelDelete()}
-                          class="text-xs px-3 py-1.5 rounded-lg transition-colors"
+                          class="text-xs px-3 py-1.5 rounded-none transition-colors"
                           style="color:var(--muted);border:1px solid var(--border)"
                         >
                           Cancel
                         </button>
                         <button
                           onclick={() => confirmDelete(item.id)}
-                          class="text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                          class="text-xs px-3 py-1.5 rounded-none font-semibold transition-colors"
                           style="background:var(--danger);color:#fff;border:1px solid var(--danger)"
                           disabled={deleting[item.id]}
                         >

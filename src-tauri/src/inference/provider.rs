@@ -9,9 +9,4 @@ pub trait InferenceProvider: Send + Sync {
         &'a self,
         code: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<FunctionData>> + Send + '_>>;
-    fn generate_fix<'a>(
-        &'a self,
-        code: &'a str,
-        cwe: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + '_>>;
 }

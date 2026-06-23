@@ -92,9 +92,7 @@ pub struct FunctionData {
     pub verdict: String,
     pub cwe: Option<String>,
     pub cwe_name: Option<String>,
-    pub cert_id: Option<String>,
     pub asvs_id: Option<String>,
-    pub misra_id: Option<String>,
     pub severity: Option<String>,
     pub confidence: Option<f64>,
     pub start_line: Option<i32>,
@@ -111,9 +109,7 @@ pub struct FunctionRow {
     pub verdict: String,
     pub cwe: Option<String>,
     pub cwe_name: Option<String>,
-    pub cert_id: Option<String>,
     pub asvs_id: Option<String>,
-    pub misra_id: Option<String>,
     pub severity: Option<String>,
     pub confidence: Option<f64>,
     pub start_line: Option<i32>,
@@ -189,95 +185,46 @@ pub struct FileRatio {
 pub struct CweHit {
     pub cwe: String,
     pub cwe_name: Option<String>,
-    pub cert_id: Option<String>,
     pub asvs_id: Option<String>,
-    pub misra_id: Option<String>,
     pub severity: Option<String>,
     pub count: u32,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct ComplianceTaxonomy {
-    pub cert_id: &'static str,
-    pub asvs_id: &'static str,
-    pub misra_id: &'static str,
-}
-
-pub fn compliance_for_cwe(cwe: &str) -> Option<ComplianceTaxonomy> {
+pub fn compliance_for_cwe(cwe: &str) -> Option<&'static str> {
     match cwe {
-        "CWE-125" => Some(ComplianceTaxonomy {
-            cert_id: "ARR30-C",
-            asvs_id: "ASVS 4.0.3 V5.4.1",
-            misra_id: "MISRA C++:2008 Rule 5-0-16",
-        }),
-        "CWE-787" => Some(ComplianceTaxonomy {
-            cert_id: "ARR30-C",
-            asvs_id: "ASVS 4.0.3 V5.4.1",
-            misra_id: "MISRA C++:2008 Rule 5-0-15",
-        }),
-        "CWE-190" => Some(ComplianceTaxonomy {
-            cert_id: "INT32-C",
-            asvs_id: "ASVS 4.0.3 V5.4.3",
-            misra_id: "MISRA C++:2008 Rule 5-0-6",
-        }),
-        "CWE-369" => Some(ComplianceTaxonomy {
-            cert_id: "INT33-C",
-            asvs_id: "ASVS 4.0.3 V5.1.4",
-            misra_id: "MISRA C++:2008 Rule 5-0-10",
-        }),
-        "CWE-415" => Some(ComplianceTaxonomy {
-            cert_id: "MEM30-C",
-            asvs_id: "ASVS 4.0.3 V5.4.1",
-            misra_id: "MISRA C++:2008 Rule 18-4-1",
-        }),
-        "CWE-476" => Some(ComplianceTaxonomy {
-            cert_id: "EXP34-C",
-            asvs_id: "ASVS 4.0.3 V5.4.1",
-            misra_id: "MISRA C++:2008 Rule 4-10-1",
-        }),
+        "CWE-125" => Some("ASVS 4.0.3 V5.4.1"),
+        "CWE-787" => Some("ASVS 4.0.3 V5.4.1"),
+        "CWE-190" => Some("ASVS 4.0.3 V5.4.3"),
+        "CWE-369" => Some("ASVS 4.0.3 V5.1.4"),
+        "CWE-415" => Some("ASVS 4.0.3 V5.4.1"),
+        "CWE-476" => Some("ASVS 4.0.3 V5.4.1"),
+        "CWE-79" => Some("ASVS 4.0.3 V5.3.3"),
+        "CWE-89" => Some("ASVS 4.0.3 V5.3.4"),
         _ => None,
     }
 }
 
-pub fn compliance_ids(cwe: Option<&str>) -> (Option<String>, Option<String>, Option<String>) {
-    cwe.and_then(compliance_for_cwe).map_or(
-        (None, None, None),
-        |taxonomy| {
-            (
-                Some(taxonomy.cert_id.to_string()),
-                Some(taxonomy.asvs_id.to_string()),
-                Some(taxonomy.misra_id.to_string()),
-            )
-        },
-    )
+pub fn asvs_id_for_cwe(cwe: Option<&str>) -> Option<String> {
+    cwe.and_then(compliance_for_cwe).map(str::to_string)
 }
 
 impl FunctionData {
     pub fn with_compliance(mut self) -> Self {
-        let (cert_id, asvs_id, misra_id) = compliance_ids(self.cwe.as_deref());
-        self.cert_id = cert_id;
-        self.asvs_id = asvs_id;
-        self.misra_id = misra_id;
+        self.asvs_id = asvs_id_for_cwe(self.cwe.as_deref());
         self
     }
 }
 
 impl FunctionRow {
     pub fn with_compliance(mut self) -> Self {
-        let (cert_id, asvs_id, misra_id) = compliance_ids(self.cwe.as_deref());
-        self.cert_id = cert_id;
-        self.asvs_id = asvs_id;
-        self.misra_id = misra_id;
+        self.asvs_id = asvs_id_for_cwe(self.cwe.as_deref());
         self
     }
 }
 
 impl CweHit {
     pub fn with_compliance(mut self) -> Self {
-        let (cert_id, asvs_id, misra_id) = compliance_ids(Some(self.cwe.as_str()));
-        self.cert_id = cert_id;
-        self.asvs_id = asvs_id;
-        self.misra_id = misra_id;
+        self.asvs_id = asvs_id_for_cwe(Some(self.cwe.as_str()));
         self
     }
 }

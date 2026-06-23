@@ -27,9 +27,7 @@ export interface FunctionData {
     verdict: string;
     cwe: string | null;
     cweName: string | null;
-    certId: string | null;
     asvsId: string | null;
-    misraId: string | null;
     severity: string | null;
     confidence: number | null;
     startLine: number | null;

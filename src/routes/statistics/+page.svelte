@@ -156,7 +156,7 @@
             backgroundColor: stats.cwe_counts.map(
               (c: any) => SEVERITY_COLORS[c.severity] ?? "#6b7280",
             ),
-            borderRadius: 4,
+            borderRadius: 0,
           },
         ],
       },
@@ -230,13 +230,13 @@
             label: "Safe",
             data: selectedFileRatios.map((f: any) => f.safe),
             backgroundColor: "#22c55e",
-            borderRadius: 4,
+            borderRadius: 0,
           },
           {
             label: "Vulnerable",
             data: selectedFileRatios.map((f: any) => f.vuln),
             backgroundColor: "#ef4444",
-            borderRadius: 4,
+            borderRadius: 0,
           },
         ],
       },
@@ -275,12 +275,12 @@
           {
             label: "Vulnerable Functions",
             data: trendData.map((d: any) => d.vuln_count),
-            borderColor: "#ff9f8a",
-            backgroundColor: "rgba(255,159,138,0.15)",
+            borderColor: "#FF8C7A",
+            backgroundColor: "rgba(255,140,122,0.15)",
             fill: true,
             tension: 0.3,
             borderWidth: 2,
-            pointBackgroundColor: "#ff839b",
+            pointBackgroundColor: "#FF849C",
           },
         ],
       },
@@ -313,11 +313,11 @@
   class="min-h-screen px-6 py-8"
   style="background:var(--bg);color:var(--text)"
 >
-  <div class="max-w-7xl mx-auto">
+  <div class="max-w-7xl mx-auto font-mono">
     <div class="mb-6">
-      <h1 class="text-lg font-semibold">Statistics</h1>
+      <h1 class="text-lg font-semibold uppercase tracking-wider">Statistics</h1>
       <p class="text-xs mt-0.5" style="color:var(--muted)">
-        Aggregate stats across all analyses
+        AGGREGATE STATS ACROSS ALL ANALYSES
       </p>
     </div>
 
@@ -337,7 +337,7 @@
         </div>
         <div class="card p-5">
           <div class="skeleton h-3 w-32 mb-4"></div>
-          <div class="skeleton h-48 rounded-full mx-auto w-48"></div>
+          <div class="skeleton h-48 mx-auto w-48"></div>
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3 mb-3">
@@ -364,7 +364,7 @@
               {kpi.label}
             </p>
             <p
-              class="text-3xl font-bold tabular-nums"
+              class="text-3xl font-bold font-mono tabular-nums"
               style="color:{kpi.color}"
             >
               {kpi.value}
@@ -422,7 +422,7 @@
             </p>
             <select
               bind:value={selectedAnalysis}
-              class="text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer"
+              class="text-xs rounded-none px-2 py-1.5 outline-none cursor-pointer"
               style="background:var(--surface-2);border:1px solid var(--border);color:var(--text)"
             >
               <option value="all">All Analyses</option>

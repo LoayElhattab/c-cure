@@ -26,7 +26,7 @@
         getCVSSColor,
         getSeverityBorderColor,
         getSeverityGlow,
-    } from "$lib/constants/cwe_db";
+    } from "$lib/data/cwe-reference";
 
     // ── Types ────────────────────────────────────────────────────────────────
     interface FunctionRow {
@@ -36,9 +36,7 @@
         verdict: string;
         cwe: string | null;
         cwe_name: string | null;
-        cert_id: string | null;
         asvs_id: string | null;
-        misra_id: string | null;
         severity: string | null;
         confidence: number | null;
         start_line: number | null;
@@ -95,41 +93,9 @@
         Low: "#3b82f6",
     };
 
-    // Client-side filter/sort on the current page slice.
-    let filtered = $derived.by(() =>
-        pagedFunctions
-            .filter((f) => {
-                const matchVerdict =
-                    filterVerdict === "all" || f.verdict === filterVerdict;
-                const s = searchTerm.toLowerCase();
-                const matchSearch =
-                    !s ||
-                    f.function_name.toLowerCase().includes(s) ||
-                    (f.cwe ?? "").toLowerCase().includes(s) ||
-                    (f.cwe_name ?? "").toLowerCase().includes(s) ||
-                    (f.file_path ?? "").toLowerCase().includes(s);
-                return matchVerdict && matchSearch;
-            })
-            .sort((a, b) => {
-                switch (sortBy) {
-                    case "severity":
-                        return (
-                            (severityOrder[a.severity ?? ""] ?? 4) -
-                            (severityOrder[b.severity ?? ""] ?? 4)
-                        );
-                    case "name":
-                        return a.function_name.localeCompare(b.function_name);
-                    case "line":
-                        return (a.start_line ?? 0) - (b.start_line ?? 0);
-                    default:
-                        return 0;
-                }
-            }),
-    );
-
     let groupedByFile = $derived.by(() => {
         const g: Record<string, FunctionRow[]> = {};
-        for (const fn of filtered) {
+        for (const fn of pagedFunctions) {
             if (!g[fn.file_path]) g[fn.file_path] = [];
             g[fn.file_path].push(fn);
         }
@@ -147,12 +113,16 @@
         expandedIds = new Set(); // collapse all on page turn
         try {
             const analysisId = parseInt($page.params.id ?? "0");
-            const result = await invoke<PagedFunctions>("get_functions_page", {
+            const result = await invoke<PagedFunctions>("search_functions", {
                 analysisId,
+                searchTerm: searchTerm || null,
+                verdictFilter: filterVerdict,
+                sortBy: sortBy,
                 limit: pageSize,
                 offset: (pageNumber - 1) * pageSize,
             });
             pagedFunctions = result.functions;
+            totalCount = result.total;
             currentPage = pageNumber;
             window.scrollTo({ top: 0, behavior: "smooth" });
         } catch (e: any) {
@@ -192,20 +162,28 @@
     function complianceBadges(fn: FunctionRow) {
         return [
             { label: "ASVS", value: fn.asvs_id },
-            { label: "CERT", value: fn.cert_id },
-            { label: "MISRA", value: fn.misra_id },
         ].filter((item): item is { label: string; value: string } =>
             Boolean(item.value),
         );
     }
 
+    let debounceTimer: any = null;
+
+    $effect(() => {
+        let currentSearch = searchTerm;
+        let currentVerdict = filterVerdict;
+        let currentSort = sortBy;
+        if (!loading) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                loadPage(1);
+            }, 300);
+        }
+    });
+
     // ── Lifecycle ────────────────────────────────────────────────────────────
     onMount(async () => {
         try {
-            const analysisId = parseInt($page.params.id ?? "0");
-            totalCount = await invoke<number>("get_functions_count", {
-                analysisId,
-            });
             await loadPage(1);
         } catch (e: any) {
             console.error("Failed to load report details", e);
@@ -369,7 +347,7 @@
                 class="text-xs shrink-0 tabular-nums"
                 style="color:var(--muted)"
             >
-                {filtered.length}/{pagedFunctions.length} on page / {totalCount} total
+                {pagedFunctions.length} on page / {totalCount} total
             </span>
         </div>
 
@@ -400,7 +378,7 @@
                             </div>
                         {/each}
                     </div>
-                {:else if filtered.length === 0}
+                {:else if pagedFunctions.length === 0}
                     <div class="text-center mt-20">
                         <p class="text-sm mb-2" style="color:var(--muted)">
                             No functions match.
@@ -418,7 +396,7 @@
                     <!-- ── By Function (flat list) ── -->
                 {:else if viewMode === "function" || !isFolder}
                     <div class="space-y-2">
-                        {#each filtered as fn (fn.id)}
+                        {#each pagedFunctions as fn (fn.id)}
                             {@const isExp =
                                 fn.id != null && expandedIds.has(fn.id)}
                             {@const color =

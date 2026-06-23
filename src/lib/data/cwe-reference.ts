@@ -84,6 +84,28 @@ export const CWE_DB: Record<string, {
         cvss_vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
         cvss_score: 7.5,
         cvss_severity: "High"
+    },
+    "CWE-79": {
+        name: "Cross-Site Scripting",
+        description: "Improper neutralization of input during web page generation, allowing untrusted data to be interpreted as active content by a browser.",
+        scenario: "A C/C++ network service or CGI component embeds user-supplied input directly into an HTML response without encoding, allowing injected script to execute in a victim's browser session.",
+        mitigations: [
+            "Encode all untrusted output for the context it is rendered in (HTML entity, attribute, or JS string encoding); use an output-encoding library rather than manual string building; apply a Content-Security-Policy where the output is served."
+        ],
+        cvss_vector: "AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+        cvss_score: 6.1,
+        cvss_severity: "Medium"
+    },
+    "CWE-89": {
+        name: "SQL Injection",
+        description: "Improper neutralization of special elements used in an SQL command, allowing attacker-controlled input to alter the intended query logic.",
+        scenario: "A C/C++ component builds a SQL query string via direct concatenation or sprintf-style formatting of unsanitized input before passing it to a database client library (e.g. the SQLite or MySQL C API), letting an attacker break out of the intended query.",
+        mitigations: [
+            "Use parameterized queries / prepared statements exclusively; never build SQL text via string concatenation of external input; apply least-privilege database accounts; validate and allowlist input where parameterization is not possible."
+        ],
+        cvss_vector: "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        cvss_score: 9.8,
+        cvss_severity: "Critical"
     }
 };
 
