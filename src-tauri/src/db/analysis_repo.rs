@@ -712,7 +712,6 @@ pub async fn search_functions_page(
         data_params.push(duckdb::types::Value::UInt(offset));
 
         let mut stmt = conn.prepare(&data_query)?;
-        
         let rows = stmt.query_map(duckdb::params_from_iter(data_params.iter()), |row| {
             Ok(FunctionRow {
                 id: row.get(0)?,

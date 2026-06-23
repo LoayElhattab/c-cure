@@ -6,13 +6,13 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 use tauri::Emitter;
 use tauri_plugin_notification::NotificationExt;
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
-use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 const DEBOUNCE_WINDOW: Duration = Duration::from_millis(500);
 
@@ -64,7 +64,12 @@ fn project_name_for_path(path: &Path) -> String {
 pub(crate) fn is_supported_source_file(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
-        .map(|extension| matches!(extension.to_ascii_lowercase().as_str(), "c" | "cpp" | "h" | "hpp" | "cc" | "cxx"))
+        .map(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "c" | "cpp" | "h" | "hpp" | "cc" | "cxx"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -97,7 +102,7 @@ enum AlertSeverity {
 /// Returns the `AlertSeverity` for a known CWE string, or `None` for Low/Medium.
 fn cwe_alert_severity(cwe: &str) -> Option<AlertSeverity> {
     match cwe {
-        "CWE-787" | "CWE-89"          => Some(AlertSeverity::Critical),
+        "CWE-787" | "CWE-89" => Some(AlertSeverity::Critical),
         "CWE-125" | "CWE-415" | "CWE-476" => Some(AlertSeverity::High),
         _ => None,
     }
@@ -136,11 +141,19 @@ fn send_severity_alert(
 
     let body = if alerts.len() == 1 {
         let (sev, cwe, cwe_name) = alerts[0];
-        let sev_label = if sev == AlertSeverity::Critical { "Critical" } else { "High" };
+        let sev_label = if sev == AlertSeverity::Critical {
+            "Critical"
+        } else {
+            "High"
+        };
         format!("{sev_label} {cwe_name} ({cwe}) detected in {filename}")
     } else {
         let (top_sev, top_cwe, top_cwe_name) = alerts[0];
-        let sev_label = if top_sev == AlertSeverity::Critical { "Critical" } else { "High" };
+        let sev_label = if top_sev == AlertSeverity::Critical {
+            "Critical"
+        } else {
+            "High"
+        };
         format!(
             "{} vulnerabilities detected in {filename} — worst: {sev_label} {top_cwe_name} ({top_cwe})",
             alerts.len()
@@ -162,17 +175,22 @@ async fn analyze_changed_file(context: WatcherContext, file_path: PathBuf, folde
     let file_path_str = file_path.to_string_lossy().to_string();
 
     // 1. Determine the project_id for the monitored directory.
-    let project_id = match crate::db::projects_repo::get_project_id_by_path(&context.pool, folder_path.clone()).await {
-        Ok(Some(id)) => id,
-        Ok(None) => {
-            eprintln!("Failed to find project ID for watched directory: {folder_path}");
-            return;
-        }
-        Err(err) => {
-            eprintln!("Failed query for project ID for watched directory: {folder_path}: {err}");
-            return;
-        }
-    };
+    let project_id =
+        match crate::db::projects_repo::get_project_id_by_path(&context.pool, folder_path.clone())
+            .await
+        {
+            Ok(Some(id)) => id,
+            Ok(None) => {
+                eprintln!("Failed to find project ID for watched directory: {folder_path}");
+                return;
+            }
+            Err(err) => {
+                eprintln!(
+                    "Failed query for project ID for watched directory: {folder_path}: {err}"
+                );
+                return;
+            }
+        };
 
     // 2. Read the file and compute the new u64 content hash.
     let content = match tokio::fs::read_to_string(&file_path).await {
@@ -188,7 +206,13 @@ async fn analyze_changed_file(context: WatcherContext, file_path: PathBuf, folde
     let new_hash = hasher.finish();
 
     // 3. Query the database using get_file_hash to retrieve the persisted hash.
-    let existing_hash = match crate::db::projects_repo::get_file_hash(&context.pool, project_id, file_path_str.clone()).await {
+    let existing_hash = match crate::db::projects_repo::get_file_hash(
+        &context.pool,
+        project_id,
+        file_path_str.clone(),
+    )
+    .await
+    {
         Ok(hash) => hash,
         Err(err) => {
             eprintln!("Failed to retrieve file hash from database: {err}");
@@ -205,16 +229,26 @@ async fn analyze_changed_file(context: WatcherContext, file_path: PathBuf, folde
 
     // 5. If they differ (or no hash exists in DB):
     // - Call upsert_file_hash to save the new hash permanently to DuckDB.
-    if let Err(err) = crate::db::projects_repo::upsert_file_hash(&context.pool, project_id, file_path_str.clone(), new_hash).await {
+    if let Err(err) = crate::db::projects_repo::upsert_file_hash(
+        &context.pool,
+        project_id,
+        file_path_str.clone(),
+        new_hash,
+    )
+    .await
+    {
         eprintln!("Failed to upsert file hash into database: {err}");
     }
 
     let url = crate::inference::load_kaggle_url(&context.app_data_dir);
 
     // Emit scan start event
-    let _ = context.app_handle.emit("monitor-scan-start", serde_json::json!({
-        "path": file_path_str
-    }));
+    let _ = context.app_handle.emit(
+        "monitor-scan-start",
+        serde_json::json!({
+            "path": file_path_str
+        }),
+    );
 
     match crate::services::analysis_service::analyze_file_service(
         &context.pool,
@@ -229,26 +263,36 @@ async fn analyze_changed_file(context: WatcherContext, file_path: PathBuf, folde
             send_severity_alert(&context.app_handle, &file_path_str, &result.functions);
 
             // Emit scan success event
-            let _ = context.app_handle.emit("monitor-scan-success", serde_json::json!({
-                "path": file_path_str,
-                "analysis_id": result.analysis_id,
-                "vuln_count": result.vuln_count,
-                "total_functions": result.total_functions
-            }));
+            let _ = context.app_handle.emit(
+                "monitor-scan-success",
+                serde_json::json!({
+                    "path": file_path_str,
+                    "analysis_id": result.analysis_id,
+                    "vuln_count": result.vuln_count,
+                    "total_functions": result.total_functions
+                }),
+            );
         }
         Err(err) => {
             let err_str = err.to_string();
             eprintln!("Automated monitoring failed for {file_path_str}: {err_str}");
             // Emit scan error event
-            let _ = context.app_handle.emit("monitor-scan-error", serde_json::json!({
-                "path": file_path_str,
-                "error": err_str
-            }));
+            let _ = context.app_handle.emit(
+                "monitor-scan-error",
+                serde_json::json!({
+                    "path": file_path_str,
+                    "error": err_str
+                }),
+            );
         }
     }
 }
 
-async fn debounce_events(mut rx: mpsc::UnboundedReceiver<PathBuf>, context: WatcherContext, folder_path: String) {
+async fn debounce_events(
+    mut rx: mpsc::UnboundedReceiver<PathBuf>,
+    context: WatcherContext,
+    folder_path: String,
+) {
     let mut pending_tasks: HashMap<PathBuf, JoinHandle<()>> = HashMap::new();
 
     while let Some(path) = rx.recv().await {

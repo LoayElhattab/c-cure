@@ -136,5 +136,4 @@ impl InferenceProvider for KaggleProvider {
             .with_compliance())
         })
     }
-
 }

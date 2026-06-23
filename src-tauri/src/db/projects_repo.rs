@@ -181,10 +181,11 @@ pub async fn get_file_hash(
     file_path: String,
 ) -> Result<Option<u64>, AppError> {
     pool.with_conn(move |conn| {
-        let mut stmt = conn.prepare(
-            "SELECT file_hash FROM file_hashes WHERE project_id = ? AND file_path = ?"
-        )?;
-        match stmt.query_row(params![project_id, file_path], |row| row.get::<_, String>(0)) {
+        let mut stmt = conn
+            .prepare("SELECT file_hash FROM file_hashes WHERE project_id = ? AND file_path = ?")?;
+        match stmt.query_row(params![project_id, file_path], |row| {
+            row.get::<_, String>(0)
+        }) {
             Ok(hash_str) => {
                 let parsed = hash_str.parse::<u64>().ok();
                 Ok(parsed)
@@ -214,4 +215,3 @@ pub async fn upsert_file_hash(
     })
     .await
 }
-

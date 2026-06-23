@@ -51,5 +51,4 @@ impl InferenceProvider for MockProvider {
             }
         })
     }
-
 }

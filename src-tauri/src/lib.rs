@@ -55,7 +55,8 @@ pub fn run() {
                     },
                     watchers.clone(),
                 )
-                .await {
+                .await
+                {
                     eprintln!("Failed to restore file watchers on startup: {err}");
                 }
             });
