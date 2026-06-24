@@ -1,8 +1,10 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
-    import { fade, scale } from "svelte/transition";
+    import { listen } from "@tauri-apps/api/event";
+    import { fade, scale, slide } from "svelte/transition";
     import {
         CheckCircle2,
+        ChevronDown,
         FileJson,
         FileText,
         FolderOpen,
@@ -66,6 +68,10 @@
     let isExporting = $state(false);
     let errorMessage = $state("");
     let previousFormat = $state<ExportFormat>("pdf_technical");
+    let exportProgress = $state("Preparing export...");
+    let pdfSettingsOpen = $state(true);
+    let maxFindings = $state(100);
+    let includeSourceCode = $state(true);
 
     let selectedOption = $derived(
         exportOptions.find((option) => option.value === selectedFormat) ??
@@ -132,6 +138,7 @@
 
         errorMessage = "";
         let targetPath = selectedPath;
+        let unlistenProgress: (() => void) | undefined;
 
         try {
             if (!targetPath) {
@@ -142,11 +149,23 @@
             if (!targetPath) return;
 
             isExporting = true;
+            exportProgress = "Starting export...";
+
+            unlistenProgress = await listen<string>("export-progress", (event) => {
+                exportProgress = event.payload;
+            });
+
             await invoke("export_report", {
                 analysisId: parseInt(analysisId),
                 format: selectedFormat,
                 filePath: targetPath,
                 executiveSummaryOnly: selectedFormat === "pdf_executive",
+                maxFindings:
+                    selectedFormat === "pdf_technical" ? maxFindings : null,
+                includeSourceCode:
+                    selectedFormat === "pdf_technical"
+                        ? includeSourceCode
+                        : null,
             });
 
             success(`${selectedOption.label} exported successfully.`);
@@ -158,7 +177,9 @@
             console.error("Failed to export report", err);
             errorToast(errorMessage);
         } finally {
+            unlistenProgress?.();
             isExporting = false;
+            exportProgress = "Preparing export...";
         }
     }
 
@@ -195,7 +216,7 @@
                     style="background:var(--accent-dim);color:var(--accent);border-bottom:1px solid var(--border)"
                 >
                     <Loader2 size={14} class="export-spinner" />
-                    Generating report, please wait...
+                    {exportProgress}
                 </div>
             {/if}
 
@@ -208,15 +229,7 @@
                         Choose a format and destination for this analysis.
                     </p>
                 </div>
-                <button
-                    type="button"
-                    class="btn-ghost h-8 w-8 justify-center p-0"
-                    aria-label="Close export dialog"
-                    disabled={isExporting}
-                    onclick={close}
-                >
-                    <X size={14} />
-                </button>
+                
             </div>
 
             <div class="px-5 pb-5">
@@ -268,6 +281,73 @@
                         </label>
                     {/each}
                 </fieldset>
+
+                {#if selectedFormat === "pdf_technical"}
+                    <div
+                        class="mt-3 overflow-hidden rounded-xl"
+                        style="border:1px solid var(--border);background:var(--surface-2)"
+                        transition:slide={{ duration: 200 }}
+                    >
+                        <button
+                            type="button"
+                            class="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-xs font-semibold uppercase"
+                            style="color:var(--muted)"
+                            disabled={isExporting}
+                            onclick={() => (pdfSettingsOpen = !pdfSettingsOpen)}
+                        >
+                            Technical PDF Options
+                            <ChevronDown
+                                size={14}
+                                class="transition-transform duration-200 {pdfSettingsOpen
+                                    ? 'rotate-180'
+                                    : ''}"
+                            />
+                        </button>
+
+                        {#if pdfSettingsOpen}
+                            <div
+                                class="space-y-3 border-t px-3 py-3"
+                                style="border-color:var(--border)"
+                                transition:slide={{ duration: 180 }}
+                            >
+                                <div class="space-y-1.5">
+                                    <label
+                                        for="max-findings"
+                                        class="text-xs font-medium"
+                                    >
+                                        Max Findings
+                                    </label>
+                                    <input
+                                        id="max-findings"
+                                        type="number"
+                                        min="1"
+                                        max="1000"
+                                        class="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                                        style="background:var(--surface);border:1px solid var(--border);color:var(--text)"
+                                        bind:value={maxFindings}
+                                        disabled={isExporting}
+                                    />
+                                    <p class="text-xs" style="color:var(--muted)">
+                                        Highest-severity findings included (1–1000).
+                                    </p>
+                                </div>
+
+                                <label
+                                    class="flex cursor-pointer items-center gap-2 text-sm"
+                                    class:cursor-not-allowed={isExporting}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        class="accent-[var(--accent)]"
+                                        bind:checked={includeSourceCode}
+                                        disabled={isExporting}
+                                    />
+                                    Include Source Code Snippets
+                                </label>
+                            </div>
+                        {/if}
+                    </div>
+                {/if}
 
                 <div class="mt-4 space-y-2">
                     <label

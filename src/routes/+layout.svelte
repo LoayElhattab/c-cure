@@ -18,7 +18,7 @@
   style="background:var(--bg);color:var(--text)"
 >
   <nav
-    class="h-14 px-5 flex items-center gap-1 sticky top-0 z-50"
+    class="h-14 px-5 flex items-center gap-1 sticky top-0 z-50 select-none"
     style="background:var(--surface);border-bottom:1px solid var(--border);backdrop-filter:blur(8px)"
   >
     <a href="/" class="flex items-center mr-4 shrink-0 group">
@@ -34,8 +34,8 @@
     {#each navLinks as link (link.href)}
       <a
         href={link.href}
-        class="nav-link font-mono uppercase tracking-wider text-[10px] {$page.url.pathname === link.href ||
-        ($page.url.pathname.startsWith(link.href) && link.href !== '/')
+        class="nav-link font-mono uppercase tracking-wider text-[10px] flex items-center gap-1.5 px-3 py-1.5 transition-all rounded-none
+        {$page.url.pathname === link.href || ($page.url.pathname.startsWith(link.href) && link.href !== '/')
           ? 'active border-b-2 border-[#FF8C7A] !bg-transparent !shadow-none'
           : ''}"
       >
@@ -48,7 +48,10 @@
 
     <a
       href="/settings"
-      class="nav-link font-mono uppercase tracking-wider text-[10px] {$page.url.pathname === '/settings' ? 'active border-b-2 border-[#FF8C7A] !bg-transparent !shadow-none' : ''}"
+      class="nav-link font-mono uppercase tracking-wider text-[10px] flex items-center gap-1.5 px-3 py-1.5 transition-all rounded-none
+      {$page.url.pathname === '/settings' 
+        ? 'active border-b-2 border-[#FF8C7A] !bg-transparent !shadow-none' 
+        : ''}"
     >
       <Settings size={13} />
       Settings
@@ -57,7 +60,7 @@
 
   <main class="flex-1"><slot /></main>
 
-  <!-- Toasts -->
+  <!-- Static High-Density Dark-Mode Only Toasts -->
   <div
     class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"
   >
@@ -69,7 +72,7 @@
           ? "background:#0a2318;border-color:#166534;color:#86efac"
           : t.type === "error"
             ? "background:#2a0a0a;border-color:#991b1b;color:#fca5a5"
-            : "background:var(--surface-2);border-color:var(--border);color:var(--muted)"}
+            : "background:#111117;border-color:#27272f;color:#a0a0a7"}
       >
         <span>{t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}</span>
         {t.message}

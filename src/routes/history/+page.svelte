@@ -48,14 +48,14 @@
 </script>
 
 <div
-  class="min-h-screen px-6 py-8 animate-fade-up"
+  class="hud-typography min-h-screen px-6 py-8 animate-fade-up"
   style="background:var(--bg);color:var(--text)"
 >
   <div class="max-w-6xl mx-auto">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-lg font-semibold">Analysis History</h1>
-        <p class="text-xs mt-0.5" style="color:var(--muted)">
+        <h1>Analysis History</h1>
+        <p class="page-kicker mt-1" style="color:var(--muted)">
           All past scans stored locally
         </p>
       </div>
@@ -199,7 +199,7 @@
                     >{item.project_name}</td
                   >
                   <td class="px-5 py-3.5 text-xs" style="color:var(--muted)"
-                    >{item.timestamp}</td
+                    >{new Date(item.timestamp).toLocaleString()}</td
                   >
                   <td class="px-5 py-3.5 text-xs" style="color:var(--muted)"
                     >{item.total_functions ?? 0}</td

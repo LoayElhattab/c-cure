@@ -13,19 +13,19 @@
 	} & HTMLAttributes<HTMLSpanElement> = $props();
 
 	const variants = {
-		default: "bg-zinc-800 text-zinc-100 border-zinc-700",
-		safe: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-		vulnerable: "bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_10px_rgba(244,63,94,0.1)]",
-		"severity-low": "bg-blue-500/10 text-blue-400 border-blue-500/20",
-		"severity-medium": "bg-amber-500/10 text-amber-400 border-amber-500/20",
-		"severity-high": "bg-orange-600/10 text-orange-500 border-orange-600/20",
-		outline: "border-zinc-700 text-zinc-400"
+		default: "bg-zinc-950 text-zinc-300 border-zinc-800",
+		safe: "bg-emerald-950/15 text-emerald-400 border-emerald-500/25",
+		vulnerable: "bg-rose-950/15 text-rose-400 border-rose-500/25 shadow-[0_0_10px_rgba(244,63,94,0.06)]",
+		"severity-low": "bg-blue-950/15 text-blue-400 border-blue-500/25",
+		"severity-medium": "bg-amber-950/15 text-amber-400 border-amber-500/25",
+		"severity-high": "bg-orange-950/15 text-orange-500 border-orange-500/25",
+		outline: "border-zinc-800 text-zinc-500 bg-transparent"
 	};
 </script>
 
 <span
 	class={cn(
-		"inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:ring-offset-2",
+		"inline-flex items-center rounded-none border px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider font-semibold transition-colors focus:outline-none",
 		variants[variant],
 		className
 	)}

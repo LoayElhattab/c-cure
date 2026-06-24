@@ -155,7 +155,7 @@
 </script>
 
 <div
-  class="min-h-screen px-6 py-8"
+  class="hud-typography min-h-screen px-6 py-8"
   style="background:var(--bg);color:var(--text)"
 >
   <div class="mx-auto max-w-6xl">
@@ -163,8 +163,8 @@
       class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
     >
       <div>
-        <h1 class="text-lg font-semibold">Automated File Monitoring</h1>
-        <p class="mt-0.5 text-xs" style="color:var(--muted)">
+        <h1>Automated File Monitoring</h1>
+        <p class="page-kicker mt-1" style="color:var(--muted)">
           Background scanning for registered C/C++ project folders.
         </p>
       </div>
@@ -239,7 +239,7 @@
                       ></span>
                     </span>
                   {/if}
-                  <p class="text-sm font-medium">{folder.name}</p>
+                  <p class="text-sm font-bold">{folder.name}</p>
                 </div>
                 <p class="mono break-all text-xs" style="color:var(--muted)">
                   {formatPath(folder.path)}

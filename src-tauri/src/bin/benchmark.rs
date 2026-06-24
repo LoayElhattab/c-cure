@@ -136,7 +136,7 @@ fn print_separator() {
 
 fn print_result_header() {
     println!();
-    println!("  {:<38}  {}", "Metric", "Value");
+    println!("  {:<38}  Value", "Metric");
     print_separator();
 }
 

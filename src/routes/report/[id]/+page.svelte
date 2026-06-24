@@ -68,7 +68,7 @@
 </script>
 
 {#if loading}
-  <div class="min-h-screen" style="background:var(--bg);color:var(--text)">
+  <div class="hud-typography min-h-screen" style="background:var(--bg);color:var(--text)">
     <!-- Header skeleton -->
     <header
       class="h-14 flex items-center justify-between px-6 sticky top-0 z-10"
@@ -185,7 +185,7 @@
   </div>
 {:else if error}
   <div
-    class="min-h-screen flex items-center justify-center"
+    class="hud-typography min-h-screen flex items-center justify-center"
     style="background:var(--bg)"
   >
     <div class="text-center">
@@ -196,7 +196,7 @@
     </div>
   </div>
 {:else}
-  <div class="min-h-screen" style="background:var(--bg);color:var(--text)">
+  <div class="hud-typography min-h-screen" style="background:var(--bg);color:var(--text)">
     <header
       class="h-14 flex items-center justify-between px-6 sticky top-0 z-10"
       style="background:var(--surface);border-bottom:1px solid var(--border)"
@@ -206,12 +206,12 @@
           ><History size={12} />History</a
         >
         <span style="color:var(--border)">·</span>
-        <h1
-          class="text-sm font-semibold mono truncate"
+        <p
+          class="text-sm font-bold mono truncate"
           style="color:var(--accent)"
         >
           {report.project_name}
-        </h1>
+        </p>
         <span
           class="text-xs shrink-0 hidden sm:block"
           style="color:var(--muted)">{report.timestamp}</span
@@ -290,8 +290,8 @@
         <div class="flex-1 grid grid-cols-4 gap-3">
           {#each [{ label: "Functions Scanned", value: totalFunctions, color: "var(--text)" }, { label: "Vulnerable", value: vulnerableFunctions, color: "var(--danger)" }, { label: "Clean", value: cleanFunctions, color: "var(--success)" }, { label: isFolder ? "Files Scanned" : "Vulnerability Rate", value: isFolder ? totalFiles : `${vulnPct}%`, color: vulnPct > 50 ? "var(--danger)" : vulnPct > 0 ? "#f97316" : "var(--success)" }] as kpi, i}
             <div class="card p-4 animate-fade-up stagger-{i + 1}">
-              <p
-                class="text-xs uppercase tracking-wider mb-1.5"
+            <p
+                class="section-label mb-1.5"
                 style="color:var(--muted)"
               >
                 {kpi.label}
@@ -311,7 +311,7 @@
       <div class="grid grid-cols-2 gap-4 animate-fade-up stagger-2">
         <div class="card p-5">
           <p
-            class="text-xs font-semibold uppercase tracking-wider mb-4"
+            class="section-label mb-4"
             style="color:var(--muted)"
           >
             Severity Breakdown
@@ -363,7 +363,7 @@
 
         <div class="card p-5">
           <p
-            class="text-xs font-semibold uppercase tracking-wider mb-4"
+            class="section-label mb-4"
             style="color:var(--muted)"
           >
             Top Vulnerabilities
@@ -420,7 +420,7 @@
         <div class="card overflow-hidden animate-fade-up stagger-3">
           <div class="px-5 py-3" style="border-bottom:1px solid var(--border)">
             <p
-              class="text-xs font-semibold uppercase tracking-wider"
+              class="section-label"
               style="color:var(--muted)"
             >
               Most Critical Findings

@@ -45,6 +45,7 @@ export interface DashboardStats {
 export interface TrendData {
     timestamp: string;
     vulnCount: number;
+    totalFunctions: number;
 }
 
 export interface StatisticsData {

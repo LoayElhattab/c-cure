@@ -136,6 +136,7 @@ pub struct DashboardStats {
     pub cwe_counts: Vec<CweCount>,
     pub severity_counts: Vec<SeverityCount>,
     pub file_ratios: Vec<FileRatio>,
+    pub analysis_file_ratios: Vec<AnalysisFileRatios>,
     pub recent_analyses: Vec<AnalysisListItem>,
 }
 
@@ -143,6 +144,7 @@ pub struct DashboardStats {
 pub struct TrendData {
     pub timestamp: String,
     pub vuln_count: i32,
+    pub total_functions: i32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -179,6 +181,12 @@ pub struct FileRatio {
     pub label: String,
     pub safe: i32,
     pub vuln: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AnalysisFileRatios {
+    pub analysis_id: i32,
+    pub file_ratios: Vec<FileRatio>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

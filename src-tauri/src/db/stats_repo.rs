@@ -1,6 +1,6 @@
 use crate::db::{
-    AnalysisListItem, CweCount, DashboardStats, DbPool, FileRatio, Kpis, SeverityCount,
-    StatisticsData, TrendData,
+    AnalysisFileRatios, AnalysisListItem, CweCount, DashboardStats, DbPool, FileRatio, Kpis,
+    SeverityCount, StatisticsData, TrendData,
 };
 use crate::error::AppError;
 
@@ -117,6 +117,73 @@ pub async fn get_statistics(pool: &DbPool) -> Result<StatisticsData, AppError> {
         }
 
         let mut stmt = conn.prepare(
+            "SELECT analysis_id, file_path, safe_count, vuln_count
+             FROM (
+                SELECT
+                    fi.analysis_id,
+                    fi.file_path,
+                    SUM(CASE WHEN f.verdict = 'safe' THEN 1 ELSE 0 END) as safe_count,
+                    SUM(CASE WHEN f.verdict = 'vulnerable' THEN 1 ELSE 0 END) as vuln_count,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY fi.analysis_id
+                        ORDER BY SUM(CASE WHEN f.verdict = 'vulnerable' THEN 1 ELSE 0 END) DESC
+                    ) as rank
+                FROM files fi
+                JOIN functions f ON f.file_id = fi.id
+                GROUP BY fi.analysis_id, fi.id, fi.file_path
+             )
+             WHERE rank <= 10
+             ORDER BY analysis_id, vuln_count DESC",
+        )?;
+        let iter = stmt.query_map([], |row| {
+            let path: String = row.get(1)?;
+            let label = path
+                .replace('\\', "/")
+                .split('/')
+                .next_back()
+                .unwrap_or("")
+                .to_string();
+
+            Ok((
+                row.get::<_, i32>(0)?,
+                FileRatio {
+                    label,
+                    safe: row.get::<_, Option<i32>>(2)?.unwrap_or(0),
+                    vuln: row.get::<_, Option<i32>>(3)?.unwrap_or(0),
+                },
+            ))
+        })?;
+
+        let mut analysis_file_ratios = Vec::new();
+        let mut active_analysis_id: Option<i32> = None;
+        let mut active_file_ratios = Vec::new();
+
+        for r in iter {
+            let (analysis_id, file_ratio) = r?;
+
+            if active_analysis_id != Some(analysis_id) {
+                if let Some(previous_analysis_id) = active_analysis_id {
+                    analysis_file_ratios.push(AnalysisFileRatios {
+                        analysis_id: previous_analysis_id,
+                        file_ratios: active_file_ratios,
+                    });
+                    active_file_ratios = Vec::new();
+                }
+
+                active_analysis_id = Some(analysis_id);
+            }
+
+            active_file_ratios.push(file_ratio);
+        }
+
+        if let Some(analysis_id) = active_analysis_id {
+            analysis_file_ratios.push(AnalysisFileRatios {
+                analysis_id,
+                file_ratios: active_file_ratios,
+            });
+        }
+
+        let mut stmt = conn.prepare(
             "SELECT
                 a.id, a.project_name, a.project_path, CAST(a.timestamp AS VARCHAR),
                 COUNT(f.id) AS total_functions,
@@ -145,17 +212,19 @@ pub async fn get_statistics(pool: &DbPool) -> Result<StatisticsData, AppError> {
         let mut stmt = conn.prepare(
             "SELECT
                 CAST(a.timestamp AS VARCHAR),
-                SUM(CASE WHEN f.verdict = 'vulnerable' THEN 1 ELSE 0 END) as vuln_count
-             FROM analyses a
-             LEFT JOIN files fi ON fi.analysis_id = a.id
-             LEFT JOIN functions f ON f.file_id = fi.id
-             GROUP BY a.id, a.timestamp
-             ORDER BY a.timestamp ASC",
+                SUM(CASE WHEN f.verdict = 'vulnerable' THEN 1 ELSE 0 END) as vuln_count,
+                COUNT(f.id) as total_functions
+            FROM analyses a
+            LEFT JOIN files fi ON fi.analysis_id = a.id
+            LEFT JOIN functions f ON f.file_id = fi.id
+            GROUP BY a.id, a.timestamp
+            ORDER BY a.timestamp ASC",
         )?;
         let iter = stmt.query_map([], |row| {
             Ok(TrendData {
                 timestamp: row.get(0)?,
                 vuln_count: row.get::<_, Option<i32>>(1)?.unwrap_or(0),
+                total_functions: row.get::<_, Option<i32>>(2)?.unwrap_or(0),
             })
         })?;
         let mut trend = Vec::new();
@@ -169,10 +238,55 @@ pub async fn get_statistics(pool: &DbPool) -> Result<StatisticsData, AppError> {
                 cwe_counts,
                 severity_counts,
                 file_ratios,
+                analysis_file_ratios,
                 recent_analyses,
             },
             trend,
         })
+    })
+    .await
+}
+
+pub async fn get_file_ratios_for_analysis(
+    pool: &DbPool,
+    analysis_id: i32,
+) -> Result<Vec<FileRatio>, AppError> {
+    pool.with_conn(move |conn| {
+        let mut stmt = conn.prepare(
+            "SELECT
+                fi.file_path,
+                SUM(CASE WHEN f.verdict = 'safe' THEN 1 ELSE 0 END) as safe_count,
+                SUM(CASE WHEN f.verdict = 'vulnerable' THEN 1 ELSE 0 END) as vuln_count
+             FROM files fi
+             JOIN functions f ON f.file_id = fi.id
+             WHERE fi.analysis_id = ?
+             GROUP BY fi.id, fi.file_path
+             ORDER BY vuln_count DESC
+             LIMIT 10",
+        )?;
+
+        let iter = stmt.query_map([analysis_id], |row| {
+            let path: String = row.get(0)?;
+            let label = path
+                .replace('\\', "/")
+                .split('/')
+                .next_back()
+                .unwrap_or("")
+                .to_string();
+
+            Ok(FileRatio {
+                label,
+                safe: row.get::<_, Option<i32>>(1)?.unwrap_or(0),
+                vuln: row.get::<_, Option<i32>>(2)?.unwrap_or(0),
+            })
+        })?;
+
+        let mut file_ratios = Vec::new();
+        for r in iter {
+            file_ratios.push(r?);
+        }
+
+        Ok(file_ratios)
     })
     .await
 }

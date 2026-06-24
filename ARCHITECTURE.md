@@ -6,9 +6,9 @@ This document describes the implementation that is currently present in this rep
 
 ### Runtime Stack
 
-- Frontend: SvelteKit with Svelte 5, TypeScript, Tailwind CSS, Chart.js, lucide-svelte icons, Bits UI primitives, highlight.js, and OGL.
+- Frontend: SvelteKit with Svelte 5, TypeScript, Tailwind CSS, Chart.js, D3, html2canvas, jsPDF, lucide-svelte icons, Bits UI primitives, highlight.js, and OGL.
 - Desktop shell: Tauri v2.
-- Backend: Rust 2021, Tokio, async DuckDB, tree-sitter C++ parsing, reqwest HTTP calls, notify file watching, genpdf PDF generation, SARIF and CSV exporters.
+- Backend: Rust 2021, Tokio, async DuckDB, tree-sitter C++ parsing, reqwest HTTP calls, notify file watching, Typst PDF generation, SARIF and CSV exporters.
 - Persistence: DuckDB stored as `ccure.db` in the Tauri app data directory.
 - Inference: remote HTTP inference provider configured by the app setting named `kaggle_url`, plus a mock provider selected by the `MOCK_API=true` environment variable.
 - Python: no `.py` files are currently checked into the repository. The current executable implementation is Rust plus TypeScript/Svelte.
@@ -134,12 +134,19 @@ The layout chooses `/logo-white.png` or `/logo-black.png` based on `$theme`. Toa
 
 Imported local CSS:
 
-- `theme.css`: design tokens, base styles, scrollbars, animations, status dots, skeleton shimmer.
+- `theme.css`: design tokens, base styles, scrollbars, animations, status dots, skeleton shimmer, and opt-in HUD typography helpers.
 - `components.css`: `.card`, `.nav-link`, `.input`, `.table-row`, gradient helpers.
 - `buttons.css`: `.btn-primary`, `.btn-ghost`, `.animated-button`.
 - `backgrounds.css`: `.bg-grid`, `.aurora-bg`, light-mode aurora overrides, aurora keyframes.
 
 The app uses CSS variables heavily in route markup. Many pages directly compose Tailwind utility classes with inline `style="color:var(...)"` and `style="background:var(...)"` rather than consistently using the primitive UI components.
+
+Typography:
+
+- Body text defaults to Inter at 13px.
+- `.mono`, `code`, and `pre` use JetBrains Mono.
+- `.hud-typography` is an opt-in route/page utility that switches the subtree to JetBrains Mono, standardizes uppercase page headings, section labels, table headers, and page kickers, and makes buttons, inputs, selects, textareas, and tables inherit the same typeface.
+- Main HUD-style screens use `.hud-typography` or page-local `font-mono` to match the upload/statistics terminal-like visual language.
 
 ### Shared Utilities
 
@@ -168,22 +175,26 @@ The toast store increments a module-level `counter` for IDs and removes each toa
 - Uses Svelte 5 `$props`.
 - Props: `variant` (`primary`, `outline`, `ghost`), `size` (`sm`, `md`, `lg`), `children`, plus HTML button attributes.
 - Uses `cn` to combine base classes, variant classes, size classes, and custom class.
+- Visual style is square HUD chrome: transparent/dim zinc backgrounds, accent borders for primary actions, mono uppercase labels, and active scale feedback.
 
 `src/lib/components/ui/Badge.svelte`:
 
 - Props: `variant`, `children`, span HTML attributes.
 - Variants include `default`, `safe`, `vulnerable`, `severity-low`, `severity-medium`, `severity-high`, and `outline`.
+- Badges are square, mono, uppercase, and severity-colored with subdued dark fills.
 
 `src/lib/components/ui/Card.svelte`:
 
 - Props: `title`, `description`, `footer`, `children`, HTML div attributes.
 - Renders optional header, child content, and optional footer.
+- Uses the current HUD panel style: square border, translucent zinc surface, top accent line, uppercase mono header text, and optional footer strip.
 
 `src/lib/components/ui/Progress.svelte`:
 
 - Wraps `bits-ui` progress primitive.
 - Props: `value`, `max`, `class`, `indicatorClass`.
 - Indicator position is controlled by a translateX transform based on value/max.
+- Uses a square bordered track, accent gradient indicator, glow, and repeating mask to create a segmented LED-style progress bar.
 
 `src/lib/components/ui/FaultyTerminal.svelte`:
 
@@ -348,63 +359,90 @@ The page renders loading skeletons, empty state, filtered-empty state, and a tab
 
 ### Statistics Page: `/statistics`
 
-File: `src/routes/statistics/+page.svelte`
+Files:
+
+- `src/routes/statistics/+page.svelte`
+- `src/routes/statistics/logic.ts`
 
 Libraries:
 
 - `Chart` and `registerables` from Chart.js.
 - `theme` store for chart colors.
 
-State:
+State and helpers imported from `src/routes/statistics/logic.ts`:
 
 - `stats`
 - `trendData`
 - `loading`
 - `error`
 - `displayKpis`
-- Chart instances: `cweChart`, `severityChart`, `fileChart`, `trendChart`
-- Canvas refs for each chart.
 - `allAnalyses`
-- `selectedAnalysis: "all" | number`
 - `selectedFileRatios`
+- `SEVERITY_COLORS`
+- `animateCountUp`
+- `loadStatistics`
+- `handleSelectionChange`
+
+Local page state:
+
+- Chart instances: `cweChart`, `severityChart`, `trendChart`, `radarChart`
+- Canvas refs for each chart.
+- `selectedAnalysis: "all" | number`
+- `hoveredInsight: number | null`
+- `activeKpiIndex`
+- `pageVisible`
+- `chartsReady`
 
 On mount:
 
-1. Invokes `get_statistics`.
-2. Expects response shape `{ dashboard, trend }`.
-3. Stores `stats = data.dashboard`.
-4. Stores `trendData = data.trend ?? []`.
-5. Builds `allAnalyses` from `stats.recent_analyses`.
-6. Initializes `selectedFileRatios` from top 10 `stats.file_ratios`, sorted by vulnerable count.
-7. Sets `loading = false`.
-8. After 50 ms, calls `drawCharts()` and animates KPI values with `animateCountUp(stats.kpis)`.
+1. Calls `loadStatistics()`, which invokes `get_statistics` and hydrates the statistics stores.
+2. If no error is present, marks the page visible.
+3. Waits for Svelte to flush DOM bindings with `tick()`.
+4. After 150 ms, marks charts ready, calls `drawCharts()`, and animates KPI values with `animateCountUp($stats.kpis)`.
+5. A second mount hook rotates the active KPI index every four seconds.
 
 The page contains a reactive statement:
 
 ```svelte
-$: if (stats && !loading) handleSelectionChange(selectedAnalysis);
+$: if ($stats && !$loading && chartsReady && selectedAnalysis !== lastHandledSelection) {
+  lastHandledSelection = selectedAnalysis;
+  handleSelectionChange(selectedAnalysis, $stats);
+}
 ```
+
+The page also normalizes the `<select>` value from string to `"all" | number` before updating `selectedAnalysis`.
 
 `handleSelectionChange("all")`:
 
 - Uses `stats.file_ratios`.
 - Sorts by vulnerable count.
 - Takes top 10.
-- Redraws the file chart.
+- Rebuilds the attack-surface ranking list.
+- Increments a request guard so older drill-down responses cannot overwrite the aggregate view.
 
-`handleSelectionChange(number)`:
+`handleSelectionChange(number | string)`:
 
-- Invokes `get_report` for the selected analysis.
-- Builds per-file safe/vulnerable counts from `report.files[*].functions`.
-- Sorts by vulnerable count and takes top 10.
-- Redraws the file chart.
+- Normalizes string select values to numeric analysis IDs.
+- Checks an in-memory `fileRatioCache` first.
+- Uses `dashboard.analysis_file_ratios` seeded by `loadStatistics()` for immediate per-analysis drill-down when available.
+- Falls back to invoking `get_analysis_file_ratios` for a cache miss.
+- Sorts by vulnerable count, takes top 10, stores the result in `fileRatioCache`, and only applies the response if it is still the latest file-ratio request.
 
 Charts:
 
-- CWE breakdown: horizontal bar chart, labels `${cwe} - ${cwe_name}` in the code as a rendered dash-like character from source text, data from `stats.cwe_counts`.
-- Severity distribution: doughnut chart from `stats.severity_counts`.
-- File ratios: stacked bar chart from `selectedFileRatios`.
-- Trend: line chart from `trendData`, label derived from the date portion of `timestamp`.
+- KPI row: compact responsive metric cards, using a 3+2 split on large screens and five columns on wider screens.
+- Security insights: single column below four generated findings, two compact columns at four or more findings.
+- CWE breakdown: horizontal bar chart, labels `${cwe}`, data from `stats.cwe_counts`, in a full-height flexible chart card.
+- Severity distribution: compact doughnut chart from `stats.severity_counts`, with center text, hidden Chart.js legend, and a compact count grid below the canvas.
+- Security dimension analysis: radar chart from derived security posture dimensions.
+- Attack surface ranking: compact per-file list from `selectedFileRatios`, with inline vulnerable-count bars.
+- Trend: line chart from `trendData`, label derived from the date portion of `timestamp`, with vulnerability rate and security health derived from `vuln_count` and `total_functions`; the chart uses a full-height flexible card.
+- Recent analyses: full-width table with compressed readable row padding.
+
+Layout:
+
+- The statistics dashboard is intentionally dense: sections use `mb-4`, primary grids use `gap-3`, repeated rows use `gap-2` where elements are closely related, and cards use `p-4` or `p-3`.
+- Visual separation comes from existing surface colors, borders, and typography weight rather than decorative spacing or background-only elements.
 
 ### Monitor Page: `/monitor`
 
@@ -490,7 +528,7 @@ Theme flow:
 
 - `toggleTheme()` updates the shared `theme` store between `dark` and `light`.
 
-The About card displays `C-Cure - v0.1.0 - Demo - FCIS Graduation Project 2026` and supervision text. This version string is UI text only; `package.json` and `tauri.conf.json` both use `0.1.0`.
+The About card displays `C-Cure - v1.1.0 - FCIS Graduation Project 2026` and supervision text. This version string is UI text only; `package.json` and `tauri.conf.json` both use `0.1.0`.
 
 ### Report Summary Page: `/report/[id]`
 
@@ -651,6 +689,10 @@ State:
 - `isExporting`
 - `errorMessage`
 - `previousFormat`
+- `exportProgress`
+- `pdfSettingsOpen`
+- `maxFindings`
+- `includeSourceCode`
 - `selectedOption`
 
 Behavior:
@@ -660,6 +702,10 @@ Behavior:
 - `withExpectedExtension()` appends the expected extension if missing.
 - `choosePath()` dynamically imports `save` from `@tauri-apps/plugin-dialog` and opens a native save dialog.
 - `runExport()` chooses a path if one is not already selected, then invokes `export_report`.
+- While export is running, the component listens for `export-progress` events and displays the latest progress text.
+- Technical PDF exports expose two extra options:
+  - `maxFindings`, numeric input with UI bounds 1 to 1000.
+  - `includeSourceCode`, checkbox controlling whether snippets appear in the PDF.
 
 IPC payload:
 
@@ -668,7 +714,10 @@ IPC payload:
   analysisId: parseInt(analysisId),
   format: selectedFormat,
   filePath: targetPath,
-  executiveSummaryOnly: selectedFormat === "pdf_executive"
+  executiveSummaryOnly: selectedFormat === "pdf_executive",
+  maxFindings: selectedFormat === "pdf_technical" ? maxFindings : null,
+  includeSourceCode:
+    selectedFormat === "pdf_technical" ? includeSourceCode : null
 }
 ```
 
@@ -778,12 +827,13 @@ Registered commands:
 | `analyze_folder` | `analyze_folder` | Load settings URL, run folder analysis service | Yes |
 | `get_history` | `get_history` | Return all analyses with totals | Yes |
 | `get_analysis_summary` | `get_analysis_summary` | Return summary metrics, top CWEs, most critical findings | Yes |
-| `get_report` | `get_report` | Return full nested report with all functions | Yes, statistics dropdown |
+| `get_report` | `get_report` | Return full nested report with all functions | Registered, not used by current frontend |
 | `delete_analysis` | `delete_analysis` | Delete analysis, files, and functions | Yes |
 | `get_functions_count` | `get_functions_count` | Return total function rows for analysis | Yes |
 | `get_functions_page` | `get_functions_page` | Return paginated flat function rows | Yes |
 | `search_functions` | `search_functions` | Return full-analysis filtered and sorted function rows | Yes |
 | `get_statistics` | `get_statistics` | Return dashboard and trend data | Yes |
+| `get_analysis_file_ratios` | `get_analysis_file_ratios` | Return top per-file safe/vulnerable counts for one analysis | Yes, statistics dropdown cache miss |
 | `extract_functions` | `extract_functions` | Parse functions from one file | Yes |
 | `check_api` | `check_api` | Check inference provider health | Yes |
 | `get_settings` | `get_settings` | Return `kaggle_url` | Yes |
@@ -1119,6 +1169,12 @@ If the KPI query fails, the code uses an all-zero `Kpis` value.
 - Limits to 10.
 - Uses only the file name as `label`.
 
+`dashboard.analysis_file_ratios`:
+
+- Computes the top 10 file ratios for each analysis in the same query using `ROW_NUMBER() OVER (PARTITION BY fi.analysis_id ORDER BY vulnerable count DESC)`.
+- Groups the rows into `{ analysis_id, file_ratios }` objects.
+- Seeds the frontend statistics page cache so selecting recent analyses can update the attack-surface ranking without waiting for another backend call.
+
 `dashboard.recent_analyses`:
 
 - Same aggregate shape as history.
@@ -1129,7 +1185,17 @@ If the KPI query fails, the code uses an all-zero `Kpis` value.
 
 - Groups by analysis ID and timestamp.
 - Sums vulnerable functions per analysis.
+- Counts total functions per analysis.
 - Orders by timestamp ascending.
+
+`get_file_ratios_for_analysis(pool, analysis_id)`:
+
+- Computes safe and vulnerable function counts for files in a single analysis.
+- Groups by file ID and path.
+- Orders by vulnerable count descending.
+- Limits to 10.
+- Uses only the file name as `label`.
+- Supports statistics-page cache misses through the `get_analysis_file_ratios` IPC command.
 
 ### Watched Projects Repository
 
@@ -1600,13 +1666,15 @@ The active watcher service does not seed initial hashes when `start_monitoring` 
 - `format: String`
 - `file_path: String`
 - `executive_summary_only: bool`
+- `max_findings: Option<usize>`
+- `include_source_code: Option<bool>`
 
 Routing:
 
 - `pdf_technical` and `pdf_executive`:
   - Loads `VulnerabilityReport`.
-  - Generates a PDF in a blocking worker.
-  - Copies the generated temp PDF to the requested destination path.
+  - Emits `export-progress` events while building and compiling the Typst document.
+  - Generates the PDF in a blocking worker directly at the requested destination path.
 - `sarif`:
   - Calls `exports::sarif::export_sarif`.
 - `csv`:
@@ -1623,32 +1691,56 @@ File: `src-tauri/src/exports/pdf.rs`
 `ExportSettings`:
 
 - Field `executive_summary_only`.
+- Field `max_findings`, used only by the technical PDF detail section.
+- Field `include_source_code`, used only by the technical PDF detail section.
 - Uses serde `rename_all = "camelCase"` and `default`.
 
-`generate_pdf(report, settings)`:
+`generate_pdf(report, settings, output_path, on_progress)`:
 
-1. Loads fonts:
-   - Windows: copies Arial font files from `C:\Windows\Fonts` into a temp directory named `c-cure-fonts`, renamed for genpdf family naming.
-   - macOS: tries `/Library/Fonts` with `DejaVuSans`, then `Arial`.
-   - Other OS: tries `/usr/share/fonts/truetype/dejavu` with `DejaVuSans`, then `Arial`.
-2. Creates a `genpdf::Document`.
-3. Title is:
-   - `C-Cure Executive Vulnerability Report` when executive summary only.
-   - `C-Cure Technical Vulnerability Report` otherwise.
-4. Sets margins to 10.
-5. Writes project info and summary counts.
-6. Writes severity breakdown if non-empty.
-7. Writes top vulnerability types if non-empty.
-8. Writes file metrics if `report.vulnerable_functions > 0`.
-9. For technical reports only:
-   - Writes `Detailed Vulnerable Findings (safe functions omitted)`.
-   - Iterates `report.files`.
-   - Writes file path.
-   - Writes each vulnerable function's name, line range, verdict, CWE, CWE name, severity, and code snippet.
-10. Renders to temp file:
-    - `c-cure-executive-report-{report.id}.pdf`
-    - or `c-cure-technical-report-{report.id}.pdf`
-11. Returns the temp file path string.
+1. Emits progress callbacks for template building, Typst compilation, and file finalization when a callback is provided.
+2. Builds a Typst source string with `build_typst_source`.
+3. Compiles `report.typ` through `typst_as_lib::TypstEngine`.
+4. Loads bundled Typst fonts from `typst_assets::fonts()`.
+5. Renders bytes through `typst_pdf::pdf`.
+6. Writes the bytes directly to `output_path`.
+7. Returns the destination path string.
+
+Global Typst styling:
+
+- A4 page, 2 cm horizontal margin, 2.5 cm vertical margin.
+- Empty page header.
+- Centered page-number footer.
+- Sans-serif base font stack: `Arial`, `Helvetica`, `DejaVu Sans`.
+- Unnumbered headings.
+- Compact stat cards, severity badges, and light-gray code snippet blocks are defined in the Typst theme string.
+
+Technical PDF flow (`executive_summary_only == false`):
+
+- Main title is exactly the project name.
+- Metadata line contains date, total functions scanned, and total vulnerabilities found.
+- Severity breakdown, top vulnerability, and file metrics summary tables are intentionally skipped.
+- The document proceeds directly to `Detailed Findings`.
+- Findings are collected with `collect_ranked_findings`, sorted by severity, file path, and function name.
+- `max_findings` truncates the ranked findings list when present.
+- `include_source_code` controls whether the fenced `cpp` code block is emitted.
+- Each finding is rendered as a clean block, not a heading:
+  - Bold function name plus severity badge.
+  - Subdued file path and line range.
+  - CWE ID and CWE name.
+  - Optional Typst fenced code block wrapped in a light-gray `code-snippet` block.
+  - Separator line after the finding.
+
+Executive PDF flow (`executive_summary_only == true`):
+
+- Main title is `{project_name} - Executive Summary`.
+- Includes summary stat cards.
+- Includes severity breakdown when present.
+- Includes top vulnerability types when present.
+- Includes `Top 10 Most Affected Files` when vulnerabilities exist.
+- The affected-files table is sorted by vulnerable function count descending, then file path ascending, and is capped to 10 rows.
+- Does not include detailed function findings or source snippets.
+
+`generate_pdf` in `commands.rs` is a separate legacy IPC command that still writes a technical or executive PDF to a temp file and returns `{ "path": path }`. The active export modal uses `export_report`.
 
 The PDF export consumes `VulnerabilityReport`, so detailed findings are vulnerable-only.
 
@@ -1788,9 +1880,11 @@ Escaping:
 ### Statistics
 
 1. `/statistics` invokes `get_statistics`.
-2. Backend returns all dashboard aggregates in one response.
-3. Frontend renders KPI cards, CWE chart, severity chart, file ratio chart, trend chart, and recent analyses.
-4. If user selects a recent analysis in the file-ratio dropdown, frontend invokes `get_report` and recomputes file ratios from the nested report.
+2. Backend returns dashboard aggregates, trend rows, and precomputed per-analysis top file ratios in one response.
+3. Frontend renders KPI cards, CWE chart, severity chart, attack-surface ranking, trend chart, radar chart, security insight cards, and recent analyses.
+4. `loadStatistics()` seeds `fileRatioCache` from `dashboard.analysis_file_ratios`.
+5. If the user selects a recent analysis in the attack-surface dropdown, frontend uses the cache immediately when possible.
+6. If the selected analysis is not cached, frontend invokes `get_analysis_file_ratios` and applies the response only if it is still the latest selection request.
 
 ## State Machines
 
@@ -1879,7 +1973,7 @@ States:
 - Exporting:
   - `isExporting = true`
   - Dialog controls disabled.
-  - "Generating report, please wait..." bar visible.
+  - Progress bar visible with the latest `export-progress` text.
 - Error:
   - `errorMessage` non-empty.
   - Error text visible and toast shown.
@@ -2024,10 +2118,11 @@ Arguments:
 
 - `--db <PATH>`
 - `--files <COUNT>`, default 1000.
-- `--functions-per-file <COUNT>`, default 50.
-- `--vuln-rate <RATE>`, default 0.10.
 - `--project-name <NAME>`, default `GIGANTIC_TEST_PROJECT`.
+- `--seed <NUMBER>`, default 42.
 - `--help` or `-h`.
+
+Function volume and vulnerability density are driven by built-in random file profiles rather than global fixed-count knobs. Profiles include large moderate-risk files, small low-risk files, high-density small files, very large sparse files, medium high-vulnerability files, mostly-safe files, and tiny files.
 
 Default DB path resolution:
 
@@ -2037,7 +2132,7 @@ Default DB path resolution:
 4. Local AppData `fcis/ccure.db` fallback.
 5. `ccure.db` fallback.
 
-It initializes the same schema shape as the main app, inserts one analysis, inserts generated file paths, and uses a DuckDB appender for function rows. Vulnerability selection is deterministic pseudo-random based on function index and the configured vulnerability rate.
+It initializes the same schema shape as the main app, inserts one analysis, inserts generated file paths, and uses a DuckDB appender for function rows. File shape selection is deterministic pseudo-random from the configured seed.
 
 ### Performance Benchmark
 
@@ -2104,6 +2199,8 @@ Rust unit tests are present in:
   - `escapes_quotes_commas_and_newlines`
 - `src-tauri/src/exports/pdf.rs`
   - `test_generate_pdf_file_creation`
+  - `typst_code_block_handles_embedded_backticks`
+  - `max_findings_caps_detailed_section`
 
 There are no checked-in frontend test files in `src`.
 

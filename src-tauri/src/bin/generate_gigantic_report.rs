@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 const CWES: &[(&str, &str, &str)] = &[
+    ("CWE-79", "Cross-site Scripting (XSS)", "High"),
+    ("CWE-89", "SQL Injection", "Critical"),
     ("CWE-125", "Out-of-bounds Read", "High"),
     ("CWE-787", "Out-of-bounds Write", "Critical"),
     ("CWE-190", "Integer Overflow or Wraparound", "High"),
@@ -16,6 +18,14 @@ const CWES: &[(&str, &str, &str)] = &[
 ];
 
 const VULN_TEMPLATES: &[(&str, &str)] = &[
+    (
+        "CWE-79",
+        "void render_comment(const char* user_input) {\n    char html[256];\n    // UNSAFE: Directly concatenating user input into HTML without escaping\n    sprintf(html, \"<div class='comment'>%s</div>\", user_input);\n    printf(\"%s\", html);\n}"
+    ),
+    (
+        "CWE-89",
+        "void search_user(const char* username) {\n    char query[256];\n    // UNSAFE: String concatenation into SQL query\n    sprintf(query, \"SELECT * FROM users WHERE name = '%s'\", username);\n    // execute_query(query);\n}"
+    ),
     (
         "CWE-787",
         "void copy_buffer(const char* src, size_t len) {\n    char dest[64];\n    // UNSAFE: No length check\n    strcpy(dest, src);\n}"
@@ -49,6 +59,18 @@ const SAFE_TEMPLATES: &[&str] = &[
     "std::string make_greeting(const std::string& name) {\n    if (name.empty()) {\n        return \"Hello, Guest!\";\n    }\n    return \"Hello, \" + name + \"!\";\n}",
     "void cleanup_safe(char** ptr) {\n    if (ptr && *ptr) {\n        free(*ptr);\n        *ptr = nullptr;\n    }\n}",
     "int safe_divide(int dividend, int divisor) {\n    if (divisor == 0) {\n        return 0; // Prevent divide-by-zero\n    }\n    return dividend / divisor;\n}",
+    "void render_comment_safe(const char* user_input) {\n    // SAFE: HTML-escape user input before output\n    printf(\"<div class='comment'>\");\n    for (const char* p = user_input; *p; ++p) {\n        switch (*p) {\n            case '<': printf(\"&lt;\"); break;\n            case '>': printf(\"&gt;\"); break;\n            case '&': printf(\"&amp;\"); break;\n            case '\\\"': printf(\"&quot;\"); break;\n            default: putchar(*p); break;\n        }\n    }\n    printf(\"</div>\");\n}",
+    "void search_user_safe(const char* username) {\n    // SAFE: Use parameterized query (prepared statement)\n    // sqlite3_stmt* stmt;\n    // sqlite3_prepare_v2(db, \"SELECT * FROM users WHERE name = ?\", -1, &stmt, NULL);\n    // sqlite3_bind_text(stmt, 1, username, -1, SQLITE_STATIC);\n    // sqlite3_step(stmt);\n}",
+];
+
+const FILE_PROFILES: &[(usize, usize, usize, usize)] = &[
+    (40, 60, 3, 8),   // Large files, moderate vulns
+    (10, 20, 1, 4),   // Small files, few vulns
+    (5, 15, 5, 10),   // Small files, high vuln density
+    (80, 120, 2, 5),  // Very large files, sparse vulns
+    (20, 40, 8, 15),  // Medium files, high vuln count
+    (30, 50, 0, 2),   // Medium-large files, mostly safe
+    (2, 8, 0, 1),     // Tiny files
 ];
 
 fn print_help() {
@@ -58,34 +80,37 @@ fn print_help() {
         Options:\n  \
           --db <PATH>                  Path to the DuckDB database file\n  \
           --files <COUNT>              Number of files to generate (default: 1000)\n  \
-          --functions-per-file <COUNT> Number of functions per file (default: 50)\n  \
-          --vuln-rate <RATE>           Fraction of functions that are vulnerable (0.0 to 1.0, default: 0.10)\n  \
           --project-name <NAME>        Name of the project (default: GIGANTIC_TEST_PROJECT)\n  \
-          --help, -h                   Show this help message\n"
+          --seed <NUMBER>              Random seed for reproducibility (default: 42)\n  \
+          --help, -h                   Show this help message\n\n\
+        File profiles are now built-in. Each file gets a random profile from:\n  \
+          - Large files (40-60 safe, 3-8 vuln)\n  \
+          - Small files (10-20 safe, 1-4 vuln)\n  \
+          - High-density small files (5-15 safe, 5-10 vuln)\n  \
+          - Very large sparse files (80-120 safe, 2-5 vuln)\n  \
+          - Medium high-vuln files (20-40 safe, 8-15 vuln)\n  \
+          - Mostly-safe files (30-50 safe, 0-2 vuln)\n  \
+          - Tiny files (2-8 safe, 0-1 vuln)\n"
     );
 }
 
 fn get_default_db_path() -> PathBuf {
-    // 1. Try local AppData: AppData\Local\fcis\ccure.db
     if let Some(local_dir) = dirs::data_local_dir() {
         let p = local_dir.join("fcis").join("ccure.db");
         if p.exists() {
             return p;
         }
     }
-    // 2. Try AppData/Roaming: AppData\Roaming\fcis\ccure.db
     if let Some(roaming_dir) = dirs::data_dir() {
         let p = roaming_dir.join("fcis").join("ccure.db");
         if p.exists() {
             return p;
         }
     }
-    // 3. Check current folder
     let p = PathBuf::from("ccure.db");
     if p.exists() {
         return p;
     }
-    // Default fallback path in Local AppData
     if let Some(local_dir) = dirs::data_local_dir() {
         local_dir.join("fcis").join("ccure.db")
     } else {
@@ -154,14 +179,48 @@ fn init_db_on_conn(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+struct SimpleRng {
+    state: u64,
+}
+
+impl SimpleRng {
+    fn new(seed: u64) -> Self {
+        Self { state: seed.max(1) }
+    }
+
+    fn next(&mut self) -> u64 {
+        self.state ^= self.state << 13;
+        self.state ^= self.state >> 7;
+        self.state ^= self.state << 17;
+        self.state
+    }
+
+    fn next_usize(&mut self, max: usize) -> usize {
+        if max == 0 {
+            return 0;
+        }
+        (self.next() as usize) % max
+    }
+
+    fn range_usize(&mut self, min: usize, max: usize) -> usize {
+        if min >= max {
+            return min;
+        }
+        min + self.next_usize(max - min + 1)
+    }
+
+    fn next_f64(&mut self) -> f64 {
+        (self.next() as f64) / (u64::MAX as f64 + 1.0)
+    }
+}
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
 
     let mut db_path: Option<PathBuf> = None;
     let mut files_count = 1000;
-    let mut functions_per_file = 50;
-    let mut vuln_rate = 0.10;
     let mut project_name = "GIGANTIC_TEST_PROJECT".to_string();
+    let mut seed: u64 = 42;
 
     let mut i = 1;
     while i < args.len() {
@@ -182,28 +241,20 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     return Err("Missing value for --files".into());
                 }
             }
-            "--functions-per-file" => {
-                if i + 1 < args.len() {
-                    functions_per_file = args[i + 1].parse()?;
-                    i += 2;
-                } else {
-                    return Err("Missing value for --functions-per-file".into());
-                }
-            }
-            "--vuln-rate" => {
-                if i + 1 < args.len() {
-                    vuln_rate = args[i + 1].parse()?;
-                    i += 2;
-                } else {
-                    return Err("Missing value for --vuln-rate".into());
-                }
-            }
             "--project-name" => {
                 if i + 1 < args.len() {
                     project_name = args[i + 1].clone();
                     i += 2;
                 } else {
                     return Err("Missing value for --project-name".into());
+                }
+            }
+            "--seed" => {
+                if i + 1 < args.len() {
+                    seed = args[i + 1].parse()?;
+                    i += 2;
+                } else {
+                    return Err("Missing value for --seed".into());
                 }
             }
             "--help" | "-h" => {
@@ -220,8 +271,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let resolved_db_path = db_path.unwrap_or_else(get_default_db_path);
     println!("Target Database Path: {:?}", resolved_db_path);
+    println!("Random Seed: {}", seed);
 
-    // Ensure parent directories exist
     if let Some(parent) = resolved_db_path.parent() {
         if !parent.exists() {
             std::fs::create_dir_all(parent)?;
@@ -238,7 +289,6 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("Starting database transaction...");
     let tx = conn.transaction()?;
 
-    // Insert analysis
     println!("Seeding analysis meta info...");
     let project_path = format!("/mock/projects/{}", project_name);
     let mut stmt = tx.prepare(
@@ -248,18 +298,34 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     drop(stmt);
     println!("Generated Analysis ID: {}", analysis_id);
 
-    println!("Preparing bulk insertions for files and functions...");
-    let total_functions = files_count * functions_per_file;
+    let mut rng = SimpleRng::new(seed);
+
+    let mut file_configs: Vec<(usize, usize)> = Vec::with_capacity(files_count);
+    let mut total_safe_planned = 0usize;
+    let mut total_vuln_planned = 0usize;
+
+    for _ in 0..files_count {
+        let profile_idx = rng.next_usize(FILE_PROFILES.len());
+        let (min_safe, max_safe, min_vuln, max_vuln) = FILE_PROFILES[profile_idx];
+        let safe_count = rng.range_usize(min_safe, max_safe);
+        let vuln_count = rng.range_usize(min_vuln, max_vuln);
+        file_configs.push((safe_count, vuln_count));
+        total_safe_planned += safe_count;
+        total_vuln_planned += vuln_count;
+    }
+
+    let total_functions = total_safe_planned + total_vuln_planned;
     println!(
-        "Plan: Generate {} files containing {} functions each (Total: {} functions)",
-        files_count, functions_per_file, total_functions
+        "Plan: Generate {} files with varied sizes (Total: {} functions, ~{} safe, ~{} vulnerable)",
+        files_count,
+        total_functions,
+        total_safe_planned,
+        total_vuln_planned
     );
 
-    // Prepare insert statement for files to get their generated IDs
     let mut file_stmt =
         tx.prepare("INSERT INTO files (analysis_id, file_path) VALUES (?, ?) RETURNING id")?;
 
-    // Create Appender for functions
     let mut appender = tx.appender("functions")?;
     appender.add_column("file_id")?;
     appender.add_column("function_name")?;
@@ -272,8 +338,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     appender.add_column("start_line")?;
     appender.add_column("end_line")?;
 
-    let mut seeded_vulnerable = 0;
-    let mut seeded_safe = 0;
+    let mut seeded_vulnerable = 0usize;
+    let mut seeded_safe = 0usize;
+    let mut global_func_index = 0usize;
 
     let vuln_templates_count = VULN_TEMPLATES.len();
     let safe_templates_count = SAFE_TEMPLATES.len();
@@ -290,36 +357,50 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             f_idx
         );
 
-        // Insert file and get its ID
         let file_id: i64 =
             file_stmt.query_row(params![analysis_id, file_path], |row| row.get(0))?;
 
-        for fn_idx in 1..=functions_per_file {
-            let func_index = (f_idx - 1) * functions_per_file + fn_idx;
+        let (safe_count, vuln_count) = file_configs[f_idx - 1];
+        let total_file_funcs = safe_count + vuln_count;
 
-            // Simple pseudo-randomness based on index (so we don't need rand dependency)
-            let is_vulnerable = ((func_index * 17 + 5) % 100) < (vuln_rate * 100.0) as usize;
+        let mut verdicts: Vec<bool> = Vec::with_capacity(total_file_funcs);
+        for _ in 0..vuln_count {
+            verdicts.push(true);
+        }
+        for _ in 0..safe_count {
+            verdicts.push(false);
+        }
+
+        for i in (1..verdicts.len()).rev() {
+            let j = rng.next_usize(i + 1);
+            verdicts.swap(i, j);
+        }
+
+        let mut current_line = 1i32;
+
+        for is_vulnerable in verdicts {
+            global_func_index += 1;
 
             let function_name = if is_vulnerable {
-                format!("process_input_vulnerable_{}", func_index)
+                format!("process_input_vulnerable_{}", global_func_index)
             } else {
-                format!("calculate_metrics_safe_{}", func_index)
+                format!("calculate_metrics_safe_{}", global_func_index)
             };
 
-            let start_line = (fn_idx * 15) as i32;
-            let end_line = start_line + 10;
+            let start_line = current_line;
+            let end_line = start_line + 10 + (rng.next_usize(5) as i32);
+            current_line = end_line + 2;
+
             let confidence = if is_vulnerable {
-                0.70 + (((func_index * 3) % 25) as f64) / 100.0 // 0.70 to 0.94
+                0.70 + (rng.next_f64() * 0.25)
             } else {
-                0.85 + (((func_index * 7) % 15) as f64) / 100.0 // 0.85 to 0.99
+                0.85 + (rng.next_f64() * 0.14)
             };
 
             if is_vulnerable {
-                // Select a template/CWE
-                let t_idx = func_index % vuln_templates_count;
+                let t_idx = rng.next_usize(vuln_templates_count);
                 let (cwe, code) = VULN_TEMPLATES[t_idx];
 
-                // Get CWE details
                 let mut cwe_name = "Unknown Weakness";
                 let mut severity = "Medium";
                 for &(c, cn, sev) in CWES {
@@ -344,8 +425,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 ])?;
                 seeded_vulnerable += 1;
             } else {
-                // Select safe template
-                let t_idx = func_index % safe_templates_count;
+                let t_idx = rng.next_usize(safe_templates_count);
                 let code = SAFE_TEMPLATES[t_idx];
 
                 appender.append_row(params![
@@ -367,11 +447,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         if f_idx % report_interval == 0 || f_idx == files_count {
             let elapsed = start_time.elapsed();
             println!(
-                "Progress: {}/{} files generated ({:.1}%). Elapsed time: {:.2?}",
+                "Progress: {}/{} files generated ({:.1}%). Elapsed time: {:.2?} | Functions so far: {} safe, {} vuln",
                 f_idx,
                 files_count,
                 (f_idx as f64 / files_count as f64) * 100.0,
-                elapsed
+                elapsed,
+                seeded_safe,
+                seeded_vulnerable
             );
         }
     }
@@ -398,6 +480,29 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "Avg Insert Rate:     {:.0} functions/sec",
         (total_functions as f64) / total_elapsed.as_secs_f64()
     );
+
+    println!("\n--- File Size Distribution ---");
+    let mut size_buckets: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for (safe, vuln) in &file_configs {
+        let total = safe + vuln;
+        let bucket = if total < 10 {
+            "tiny (<10)".to_string()
+        } else if total < 30 {
+            "small (10-29)".to_string()
+        } else if total < 60 {
+            "medium (30-59)".to_string()
+        } else if total < 100 {
+            "large (60-99)".to_string()
+        } else {
+            "huge (100+)".to_string()
+        };
+        *size_buckets.entry(bucket).or_insert(0) += 1;
+    }
+    let mut buckets: Vec<_> = size_buckets.into_iter().collect();
+    buckets.sort_by(|a, b| a.0.cmp(&b.0));
+    for (bucket, count) in buckets {
+        println!("  {:20}: {:4} files", bucket, count);
+    }
 
     Ok(())
 }

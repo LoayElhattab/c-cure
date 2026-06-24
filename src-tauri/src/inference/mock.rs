@@ -20,7 +20,7 @@ impl InferenceProvider for MockProvider {
                 code.contains("strcpy") || code.contains("malloc") || code.contains("gets");
             if is_vulnerable {
                 let (cwe_name, severity) = super::get_cwe_info("CWE-787");
-                return Ok(FunctionData {
+                Ok(FunctionData {
                     id: None,
                     function_name: "".into(),
                     code: "".into(),
@@ -33,9 +33,9 @@ impl InferenceProvider for MockProvider {
                     start_line: None,
                     end_line: None,
                 }
-                .with_compliance());
+                .with_compliance())
             } else {
-                return Ok(FunctionData {
+                Ok(FunctionData {
                     id: None,
                     function_name: "".into(),
                     code: "".into(),
@@ -47,7 +47,7 @@ impl InferenceProvider for MockProvider {
                     confidence: Some(0.95),
                     start_line: None,
                     end_line: None,
-                });
+                })
             }
         })
     }

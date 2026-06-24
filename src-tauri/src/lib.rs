@@ -83,6 +83,7 @@ pub fn run() {
             commands::get_functions_page,
             commands::search_functions,
             commands::get_statistics,
+            commands::get_analysis_file_ratios,
             commands::extract_functions,
             commands::check_api,
             commands::monitor_list,

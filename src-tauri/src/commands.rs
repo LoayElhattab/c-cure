@@ -5,7 +5,9 @@ use crate::error::AppError;
 use crate::exports::pdf::ExportSettings;
 use crate::inference::AnalysisResult;
 use crate::AppState;
+use std::env;
 use std::path::PathBuf;
+use tauri::{AppHandle, Emitter};
 
 #[tauri::command]
 pub async fn analyze_file(
@@ -129,6 +131,14 @@ pub async fn get_statistics(state: tauri::State<'_, AppState>) -> Result<Statist
 }
 
 #[tauri::command]
+pub async fn get_analysis_file_ratios(
+    state: tauri::State<'_, AppState>,
+    analysis_id: i32,
+) -> Result<Vec<crate::db::FileRatio>, AppError> {
+    crate::db::stats_repo::get_file_ratios_for_analysis(&state.pool, analysis_id).await
+}
+
+#[tauri::command]
 pub fn extract_functions(file_path: String) -> Result<Value, AppError> {
     let functions = crate::parser::extract_functions(&file_path)
         .map_err(|e| AppError::Custom(format!("Failed to extract: {}", e)))?;
@@ -175,9 +185,17 @@ pub async fn generate_pdf(
             .ok_or_else(|| AppError::Custom("Report not found".into()))?;
     let settings = ExportSettings {
         executive_summary_only,
+        ..Default::default()
     };
+    let report_id = report.id;
     let path = tauri::async_runtime::spawn_blocking(move || {
-        crate::exports::pdf::generate_pdf(&report, settings)
+        let tier = if settings.executive_summary_only {
+            "executive"
+        } else {
+            "technical"
+        };
+        let output = env::temp_dir().join(format!("c-cure-{tier}-report-{report_id}.pdf"));
+        crate::exports::pdf::generate_pdf(&report, settings, &output, None::<fn(&str)>)
     })
     .await
     .map_err(|e| AppError::Custom(format!("PDF export worker failed: {e}")))?
@@ -187,14 +205,18 @@ pub async fn generate_pdf(
 
 #[tauri::command]
 pub async fn export_report(
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
     analysis_id: i64,
     format: String,
     file_path: String,
     executive_summary_only: bool,
+    max_findings: Option<usize>,
+    include_source_code: Option<bool>,
 ) -> Result<Value, AppError> {
     match format.as_str() {
         "pdf_technical" | "pdf_executive" => {
+            let _ = app.emit("export-progress", "Querying Database...");
             let report =
                 crate::db::analysis_repo::get_vulnerability_report(&state.pool, analysis_id as i32)
                     .await?
@@ -203,11 +225,19 @@ pub async fn export_report(
             let destination = PathBuf::from(&file_path);
             let settings = ExportSettings {
                 executive_summary_only,
+                max_findings,
+                include_source_code,
             };
+            let app_handle = app.clone();
             tauri::async_runtime::spawn_blocking(move || {
-                let generated_path = crate::exports::pdf::generate_pdf(&report, settings)?;
-                std::fs::copy(&generated_path, &destination)
-                    .map_err(|e| AppError::Custom(format!("Failed to save PDF export: {e}")))?;
+                crate::exports::pdf::generate_pdf(
+                    &report,
+                    settings,
+                    &destination,
+                    Some(|message: &str| {
+                        let _ = app_handle.emit("export-progress", message);
+                    }),
+                )?;
                 Ok::<(), AppError>(())
             })
             .await

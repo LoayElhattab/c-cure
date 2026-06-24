@@ -209,7 +209,7 @@
 </svelte:head>
 
 {#if loading}
-    <div class="min-h-screen" style="background:var(--bg)">
+    <div class="hud-typography min-h-screen" style="background:var(--bg)">
         <div
             class="h-14 flex items-center gap-3 px-4"
             style="background:var(--surface);border-bottom:1px solid var(--border)"
@@ -229,14 +229,14 @@
     </div>
 {:else if error}
     <div
-        class="min-h-screen flex items-center justify-center"
+        class="hud-typography min-h-screen flex items-center justify-center"
         style="background:var(--bg)"
     >
         <p class="text-xs" style="color:var(--danger)">{error}</p>
     </div>
 {:else}
     <div
-        class="min-h-screen flex flex-col"
+        class="hud-typography min-h-screen flex flex-col"
         style="background:var(--bg);color:var(--text)"
     >
         <!-- Sticky toolbar -->
@@ -655,7 +655,7 @@
                                                                 style="background:var(--surface)"
                                                             >
                                                                 <p
-                                                                    class="text-xs font-semibold uppercase tracking-wider mb-2"
+                                                                    class="section-label mb-2"
                                                                     style="color:var(--muted)"
                                                                 >
                                                                     Attack
@@ -668,7 +668,7 @@
                                                                     {data.scenario}
                                                                 </p>
                                                                 <p
-                                                                    class="text-xs font-semibold uppercase tracking-wider mb-2"
+                                                                    class="section-label mb-2"
                                                                     style="color:var(--muted)"
                                                                 >
                                                                     Mitigations
