@@ -1,6 +1,6 @@
 import { goto } from "$app/navigation";
 import { invoke } from "@tauri-apps/api/core";
-import { pendingAnalysis } from "$lib/store";
+import { pendingAnalysis } from "$lib/stores/store";
 import { get } from "svelte/store";
 
 export const STEPS = [

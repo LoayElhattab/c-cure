@@ -3,19 +3,26 @@
   import { Trash2, Search, X, Plus } from "lucide-svelte";
   import { loadHistory, deleteAnalysis } from "./logic";
 
-  let history: any[] = [];
-  let loading = true;
-  let deleting: Record<number, boolean> = {};
-  let confirmId: number | null = null; // which row is showing inline confirm
-  let searchTerm = "";
+  let history = $state<any[]>([]);
+  let loading = $state(true);
+  let deleting = $state<Record<number, boolean>>({});
+  let confirmId = $state<number | null>(null); // which row is showing inline confirm
+  let searchTerm = $state("");
 
-  $: filteredHistory = history.filter((item) =>
+  let filteredHistory = $derived(history.filter((item) =>
     item.project_name.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  ));
 
   onMount(async () => {
-    history = await loadHistory();
-    loading = false;
+    loading = true;
+    try {
+      history = await loadHistory();
+    } catch (err) {
+      console.error("Failed to load analysis history", err);
+      history = [];
+    } finally {
+      loading = false;
+    }
   });
 
   function requestDelete(id: number) {
@@ -27,25 +34,28 @@
   }
 
   async function confirmDelete(id: number) {
-    deleting[id] = true;
-    deleting = deleting;
+    deleting = { ...deleting, [id]: true };
     confirmId = null;
-    const deleted = await deleteAnalysis(id);
-    if (deleted) history = history.filter((h) => h.id !== id);
-    deleting[id] = false;
-    deleting = deleting;
+    try {
+      const deleted = await deleteAnalysis(id);
+      if (deleted) history = history.filter((h) => h.id !== id);
+    } catch (err) {
+      console.error("Failed to delete analysis", err);
+    } finally {
+      deleting = { ...deleting, [id]: false };
+    }
   }
 </script>
 
 <div
-  class="min-h-screen px-6 py-8 animate-fade-up"
+  class="hud-typography min-h-screen px-6 py-8 animate-fade-up"
   style="background:var(--bg);color:var(--text)"
 >
   <div class="max-w-6xl mx-auto">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-lg font-semibold">Analysis History</h1>
-        <p class="text-xs mt-0.5" style="color:var(--muted)">
+        <h1>Analysis History</h1>
+        <p class="page-kicker mt-1" style="color:var(--muted)">
           All past scans stored locally
         </p>
       </div>
@@ -54,7 +64,7 @@
 
     {#if !loading && history.length > 0}
       <div
-        class="flex items-center gap-3 rounded-xl px-4 py-2.5 mb-4"
+        class="flex items-center gap-3 rounded-none px-4 py-2.5 mb-4"
         style="background:var(--surface);border:1px solid var(--border)"
       >
         <Search size={13} color="var(--muted)" />
@@ -167,14 +177,14 @@
                       <div class="flex items-center gap-2">
                         <button
                           onclick={() => cancelDelete()}
-                          class="text-xs px-3 py-1.5 rounded-lg transition-colors"
+                          class="text-xs px-3 py-1.5 rounded-none transition-colors"
                           style="color:var(--muted);border:1px solid var(--border)"
                         >
                           Cancel
                         </button>
                         <button
                           onclick={() => confirmDelete(item.id)}
-                          class="text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                          class="text-xs px-3 py-1.5 rounded-none font-semibold transition-colors"
                           style="background:var(--danger);color:#fff;border:1px solid var(--danger)"
                           disabled={deleting[item.id]}
                         >
@@ -189,7 +199,7 @@
                     >{item.project_name}</td
                   >
                   <td class="px-5 py-3.5 text-xs" style="color:var(--muted)"
-                    >{item.timestamp}</td
+                    >{new Date(item.timestamp).toLocaleString()}</td
                   >
                   <td class="px-5 py-3.5 text-xs" style="color:var(--muted)"
                     >{item.total_functions ?? 0}</td

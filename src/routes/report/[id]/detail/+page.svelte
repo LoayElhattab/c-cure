@@ -1,11 +1,14 @@
 <script lang="ts">
     import { page } from "$app/stores";
-    import { theme } from "$lib/theme";
+    import { theme } from "$lib/types/theme";
     import { onMount } from "svelte";
+    import { invoke } from "@tauri-apps/api/core";
     import {
         Copy,
         Check,
         ChevronDown,
+        ChevronLeft,
+        ChevronRight,
         Search,
         X,
         LayoutList,
@@ -13,33 +16,70 @@
         ArrowLeft,
         Download,
     } from "lucide-svelte";
+    import ExportReportModal from "$lib/components/ExportReportModal.svelte";
     import {
-        fetchReport,
-        flattenFunctions,
         highlightCode,
         copyToClipboard,
-        exportPDF,
     } from "../logic";
     import {
         getCWEData,
         getCVSSColor,
         getSeverityBorderColor,
         getSeverityGlow,
-    } from "$lib/cwe_db";
+    } from "$lib/data/cwe-reference";
 
-    let report: any = null;
-    let error = "";
-    let loading = true;
-    let allFunctions: any[] = [];
-    let expandedIds = new Set<number>();
-    let expandedFiles = new Set<string>();
-    let copiedId: number | null = null;
+    // ── Types ────────────────────────────────────────────────────────────────
+    interface FunctionRow {
+        id: number | null;
+        function_name: string;
+        code: string;
+        verdict: string;
+        cwe: string | null;
+        cwe_name: string | null;
+        asvs_id: string | null;
+        severity: string | null;
+        confidence: number | null;
+        start_line: number | null;
+        end_line: number | null;
+        file_path: string;
+    }
 
-    let searchTerm = "";
-    let filterVerdict: "all" | "vulnerable" | "safe" = "all";
-    let sortBy: "severity" | "name" | "line" = "severity";
-    let viewMode: "function" | "file" = "function";
+    interface PagedFunctions {
+        total: number;
+        limit: number;
+        offset: number;
+        functions: FunctionRow[];
+    }
 
+    // ── State ────────────────────────────────────────────────────────────────
+    let error = $state("");
+    let loading = $state(true);
+    let isLoading = $state(false);
+    let exportModalOpen = $state(false);
+
+    // Pagination
+    let currentPage = $state(1);
+    let pageSize = $state(50);
+    let totalCount = $state(0);
+    let totalPages = $derived(Math.max(1, Math.ceil(totalCount / pageSize)));
+    let pageStart = $derived(
+        totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1,
+    );
+    let pageEnd = $derived(Math.min(currentPage * pageSize, totalCount));
+
+    // Data (current page slice)
+    let pagedFunctions = $state<FunctionRow[]>([]);
+
+    // UI state
+    let expandedIds = $state(new Set<number>());
+    let expandedFiles = $state(new Set<string>());
+    let copiedId = $state<number | null>(null);
+    let searchTerm = $state("");
+    let filterVerdict = $state<"all" | "vulnerable" | "safe">("all");
+    let sortBy = $state<"severity" | "name" | "line">("severity");
+    let viewMode = $state<"function" | "file">("function");
+
+    // ── Derived ──────────────────────────────────────────────────────────────
     const severityOrder: Record<string, number> = {
         Critical: 0,
         High: 1,
@@ -53,49 +93,55 @@
         Low: "#3b82f6",
     };
 
-    $: isFolder = (report?.files?.length ?? 0) > 1;
-
-    $: filtered = allFunctions
-        .filter((f) => {
-            const matchVerdict =
-                filterVerdict === "all" || f.verdict === filterVerdict;
-            const s = searchTerm.toLowerCase();
-            const matchSearch =
-                !s ||
-                f.function_name.toLowerCase().includes(s) ||
-                (f.cwe ?? "").toLowerCase().includes(s) ||
-                (f.cwe_name ?? "").toLowerCase().includes(s) ||
-                (f.file_path ?? "").toLowerCase().includes(s);
-            return matchVerdict && matchSearch;
-        })
-        .sort((a, b) => {
-            switch (sortBy) {
-                case "severity":
-                    return (
-                        (severityOrder[a.severity] ?? 4) -
-                        (severityOrder[b.severity] ?? 4)
-                    );
-                case "name":
-                    return a.function_name.localeCompare(b.function_name);
-                case "line":
-                    return (a.start_line ?? 0) - (b.start_line ?? 0);
-                default:
-                    return 0;
-            }
-        });
-
-    $: groupedByFile = (() => {
-        const g: Record<string, any[]> = {};
-        for (const fn of filtered) {
+    let groupedByFile = $derived.by(() => {
+        const g: Record<string, FunctionRow[]> = {};
+        for (const fn of pagedFunctions) {
             if (!g[fn.file_path]) g[fn.file_path] = [];
             g[fn.file_path].push(fn);
         }
         return g;
-    })();
+    });
 
-    $: codeBg = $theme === "dark" ? "#1a1b26" : "#f8f8f8";
+    // Whether the page looks like a multi-file (folder) analysis.
+    let isFolder = $derived(Object.keys(groupedByFile).length > 1);
 
-    function toggleExpand(id: number) {
+    let codeBg = $derived($theme === "dark" ? "#1a1b26" : "#f8f8f8");
+
+    // ── Data fetching ────────────────────────────────────────────────────────
+    async function loadPage(pageNumber: number) {
+        isLoading = true;
+        expandedIds = new Set(); // collapse all on page turn
+        try {
+            const analysisId = parseInt($page.params.id ?? "0");
+            const result = await invoke<PagedFunctions>("search_functions", {
+                analysisId,
+                searchTerm: searchTerm || null,
+                verdictFilter: filterVerdict,
+                sortBy: sortBy,
+                limit: pageSize,
+                offset: (pageNumber - 1) * pageSize,
+            });
+            pagedFunctions = result.functions;
+            totalCount = result.total;
+            currentPage = pageNumber;
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        } catch (e: any) {
+            console.error("Failed to load report functions page", e);
+            error = e.message ?? String(e);
+        } finally {
+            isLoading = false;
+        }
+    }
+
+    async function goToPage(pg: number) {
+        if (isLoading || pg < 1 || pg > totalPages || pg === currentPage)
+            return;
+        await loadPage(pg);
+    }
+
+    // ── UI helpers ───────────────────────────────────────────────────────────
+    function toggleExpand(id: number | null) {
+        if (id == null) return;
         const n = new Set(expandedIds);
         n.has(id) ? n.delete(id) : n.add(id);
         expandedIds = n;
@@ -107,24 +153,44 @@
         expandedFiles = n;
     }
 
-    async function handleCopy(fn: any) {
+    async function handleCopy(fn: FunctionRow) {
         await copyToClipboard(fn.code ?? "");
         copiedId = fn.id;
         setTimeout(() => (copiedId = null), 2000);
     }
 
+    function complianceBadges(fn: FunctionRow) {
+        return [
+            { label: "ASVS", value: fn.asvs_id },
+        ].filter((item): item is { label: string; value: string } =>
+            Boolean(item.value),
+        );
+    }
+
+    let debounceTimer: any = null;
+
+    $effect(() => {
+        let currentSearch = searchTerm;
+        let currentVerdict = filterVerdict;
+        let currentSort = sortBy;
+        if (!loading) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                loadPage(1);
+            }, 300);
+        }
+    });
+
+    // ── Lifecycle ────────────────────────────────────────────────────────────
     onMount(async () => {
         try {
-            const data = await fetchReport($page.params.id ?? "0");
-            report = data;
-            allFunctions = flattenFunctions(data);
-            const s = new Set<string>();
-            (data.files ?? []).forEach((f: any) => s.add(f.file_path));
-            expandedFiles = s;
+            await loadPage(1);
         } catch (e: any) {
-            error = e.message;
+            console.error("Failed to load report details", e);
+            error = e.message ?? String(e);
+        } finally {
+            loading = false;
         }
-        loading = false;
     });
 </script>
 
@@ -143,7 +209,7 @@
 </svelte:head>
 
 {#if loading}
-    <div class="min-h-screen" style="background:var(--bg)">
+    <div class="hud-typography min-h-screen" style="background:var(--bg)">
         <div
             class="h-14 flex items-center gap-3 px-4"
             style="background:var(--surface);border-bottom:1px solid var(--border)"
@@ -163,14 +229,14 @@
     </div>
 {:else if error}
     <div
-        class="min-h-screen flex items-center justify-center"
+        class="hud-typography min-h-screen flex items-center justify-center"
         style="background:var(--bg)"
     >
         <p class="text-xs" style="color:var(--danger)">{error}</p>
     </div>
 {:else}
     <div
-        class="min-h-screen flex flex-col"
+        class="hud-typography min-h-screen flex flex-col"
         style="background:var(--bg);color:var(--text)"
     >
         <!-- Sticky toolbar -->
@@ -270,24 +336,49 @@
             {/if}
 
             <button
-                onclick={() => exportPDF($page.params.id ?? "0")}
-                class="btn-ghost shrink-0"
+                type="button"
+                onclick={() => (exportModalOpen = true)}
+                class="btn-primary shrink-0"
             >
-                <Download size={12} />PDF
+                <Download size={12} />Export Report
             </button>
 
             <span
                 class="text-xs shrink-0 tabular-nums"
                 style="color:var(--muted)"
             >
-                {filtered.length}/{allFunctions.length}
+                {pagedFunctions.length} on page / {totalCount} total
             </span>
         </div>
 
         <!-- Content -->
         <div class="flex-1 overflow-y-auto">
-            <div class="max-w-6xl mx-auto px-6 py-4">
-                {#if filtered.length === 0}
+            <div id="fn-list-top" class="max-w-6xl mx-auto px-6 py-4">
+                {#if isLoading}
+                    <div class="space-y-2">
+                        {#each Array(6) as _}
+                            <div
+                                class="card p-4 overflow-hidden"
+                                style="border-left:3px solid var(--border)"
+                            >
+                                <div class="flex items-center gap-3">
+                                    <div
+                                        class="skeleton h-2.5 w-2.5 rounded-full shrink-0"
+                                    ></div>
+                                    <div class="flex-1 min-w-0">
+                                        <div
+                                            class="skeleton h-4 w-56 max-w-full mb-2"
+                                        ></div>
+                                        <div
+                                            class="skeleton h-3 w-80 max-w-full"
+                                        ></div>
+                                    </div>
+                                    <div class="skeleton h-7 w-20 rounded-lg"></div>
+                                </div>
+                            </div>
+                        {/each}
+                    </div>
+                {:else if pagedFunctions.length === 0}
                     <div class="text-center mt-20">
                         <p class="text-sm mb-2" style="color:var(--muted)">
                             No functions match.
@@ -305,11 +396,12 @@
                     <!-- ── By Function (flat list) ── -->
                 {:else if viewMode === "function" || !isFolder}
                     <div class="space-y-2">
-                        {#each filtered as fn (fn.id)}
-                            {@const isExp = expandedIds.has(fn.id)}
+                        {#each pagedFunctions as fn (fn.id)}
+                            {@const isExp =
+                                fn.id != null && expandedIds.has(fn.id)}
                             {@const color =
                                 fn.verdict === "vulnerable"
-                                    ? (SEVERITY_COLORS[fn.severity] ??
+                                    ? (SEVERITY_COLORS[fn.severity ?? ""] ??
                                       "#ef4444")
                                     : "var(--success)"}
 
@@ -361,6 +453,14 @@
                                                     style="background:{color}20;color:{color};font-size:10px"
                                                     >{fn.severity}</span
                                                 >
+                                                {#each complianceBadges(fn) as standard}
+                                                    <span
+                                                        class="px-1.5 py-0.5 rounded font-semibold"
+                                                        title="{standard.label}: {standard.value}"
+                                                        style="background:var(--surface-2);border:1px solid var(--border);color:var(--muted);font-size:10px"
+                                                        >{standard.value}</span
+                                                    >
+                                                {/each}
                                             {:else}
                                                 <span
                                                     class="px-1.5 py-0.5 rounded font-semibold"
@@ -446,7 +546,8 @@
                                                     style="color:var(--subtle);border-right:1px solid var(--border);min-width:2.5rem"
                                                 >
                                                     {#each fnLines as _, i}<div>
-                                                            {fn.start_line + i}
+                                                            {(fn.start_line ??
+                                                                0) + i}
                                                         </div>{/each}
                                                 </div>
                                                 <pre
@@ -504,13 +605,21 @@
                                                                             style="color:{sevCol}"
                                                                             >{cweCode}</span
                                                                         >
+                                                                    <span
+                                                                        class="px-1.5 py-0.5 rounded font-semibold"
+                                                                        style="background:{sevCol}22;color:{sevCol};font-size:10px"
+                                                                    >
+                                                                        {data.cvss_severity}
+                                                                    </span>
+                                                                    {#each complianceBadges(fn) as standard}
                                                                         <span
                                                                             class="px-1.5 py-0.5 rounded font-semibold"
-                                                                            style="background:{sevCol}22;color:{sevCol};font-size:10px"
+                                                                            title="{standard.label}: {standard.value}"
+                                                                            style="background:var(--surface-2);border:1px solid var(--border);color:var(--muted);font-size:10px"
+                                                                            >{standard.value}</span
                                                                         >
-                                                                            {data.cvss_severity}
-                                                                        </span>
-                                                                    </div>
+                                                                    {/each}
+                                                                </div>
                                                                     <p
                                                                         class="text-xs font-semibold"
                                                                         style="color:var(--text)"
@@ -546,7 +655,7 @@
                                                                 style="background:var(--surface)"
                                                             >
                                                                 <p
-                                                                    class="text-xs font-semibold uppercase tracking-wider mb-2"
+                                                                    class="section-label mb-2"
                                                                     style="color:var(--muted)"
                                                                 >
                                                                     Attack
@@ -559,7 +668,7 @@
                                                                     {data.scenario}
                                                                 </p>
                                                                 <p
-                                                                    class="text-xs font-semibold uppercase tracking-wider mb-2"
+                                                                    class="section-label mb-2"
                                                                     style="color:var(--muted)"
                                                                 >
                                                                     Mitigations
@@ -680,13 +789,13 @@
                                         style="border-color:var(--border)"
                                     >
                                         {#each fns as fn (fn.id)}
-                                            {@const isExp = expandedIds.has(
-                                                fn.id,
-                                            )}
+                                            {@const isExp =
+                                                fn.id != null &&
+                                                expandedIds.has(fn.id)}
                                             {@const color =
                                                 fn.verdict === "vulnerable"
                                                     ? (SEVERITY_COLORS[
-                                                          fn.severity
+                                                          fn.severity ?? ""
                                                       ] ?? "#ef4444")
                                                     : "var(--success)"}
 
@@ -733,6 +842,14 @@
                                                                     style="background:{color}20;color:{color};font-size:10px"
                                                                     >{fn.severity}</span
                                                                 >
+                                                                {#each complianceBadges(fn) as standard}
+                                                                    <span
+                                                                        class="px-1.5 py-0.5 rounded font-semibold"
+                                                                        title="{standard.label}: {standard.value}"
+                                                                        style="background:var(--surface-2);border:1px solid var(--border);color:var(--muted);font-size:10px"
+                                                                        >{standard.value}</span
+                                                                    >
+                                                                {/each}
                                                             {:else}
                                                                 <span
                                                                     class="px-1.5 py-0.5 rounded font-semibold"
@@ -815,7 +932,8 @@
                                                                 >
                                                                     {#each fnLines as _, i}<div
                                                                         >
-                                                                            {fn.start_line +
+                                                                            {(fn.start_line ??
+                                                                                0) +
                                                                                 i}
                                                                         </div>{/each}
                                                                 </div>
@@ -872,6 +990,14 @@
                                                                                         style="background:{sevCol}22;color:{sevCol};font-size:10px"
                                                                                         >{fn.severity}</span
                                                                                     >
+                                                                                    {#each complianceBadges(fn) as standard}
+                                                                                        <span
+                                                                                            class="px-1.5 py-0.5 rounded font-semibold"
+                                                                                            title="{standard.label}: {standard.value}"
+                                                                                            style="background:var(--surface-2);border:1px solid var(--border);color:var(--muted);font-size:10px"
+                                                                                            >{standard.value}</span
+                                                                                        >
+                                                                                    {/each}
                                                                                 </div>
                                                                                 <p
                                                                                     class="text-xs font-semibold"
@@ -960,7 +1086,57 @@
                         {/each}
                     </div>
                 {/if}
+
+                {#if totalCount > 0}
+                    <div
+                        class="mt-6 mb-4 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-xl px-4 py-3"
+                        style="background:var(--surface);border:1px solid var(--border)"
+                    >
+                        <p
+                            class="text-xs tabular-nums text-center sm:text-left"
+                            style="color:var(--muted)"
+                        >
+                            Showing {pageStart}-{pageEnd} of {totalCount} functions
+                        </p>
+
+                        <div class="flex items-center gap-2">
+                            <button
+                                onclick={() => goToPage(currentPage - 1)}
+                                disabled={currentPage === 1 || isLoading}
+                                class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100 disabled:active:scale-100"
+                                style="background:var(--surface-2);border-color:var(--border);color:var(--text)"
+                            >
+                                <ChevronLeft size={13} />
+                                Previous
+                            </button>
+
+                            <span
+                                class="min-w-28 rounded-lg px-3 py-1.5 text-center text-xs tabular-nums"
+                                style="background:var(--bg);border:1px solid var(--border);color:var(--muted)"
+                            >
+                                Page {currentPage} of {totalPages}
+                            </span>
+
+                            <button
+                                onclick={() => goToPage(currentPage + 1)}
+                                disabled={currentPage * pageSize >= totalCount ||
+                                    isLoading}
+                                class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100 disabled:active:scale-100"
+                                style="background:var(--surface-2);border-color:var(--border);color:var(--text)"
+                            >
+                                Next
+                                <ChevronRight size={13} />
+                            </button>
+                        </div>
+                    </div>
+                {/if}
             </div>
         </div>
+
+        <ExportReportModal
+            analysisId={$page.params.id ?? "0"}
+            open={exportModalOpen}
+            onClose={() => (exportModalOpen = false)}
+        />
     </div>
 {/if}

@@ -1,14 +1,15 @@
 <script>
   import "../app.css";
   import { page } from "$app/stores";
-  import { Upload, BarChart3, Clock, Settings } from "lucide-svelte";
-  import { toasts } from "$lib/toast";
-  import { theme } from "$lib/theme";
+  import { Upload, BarChart3, Clock, Settings, Radio } from "lucide-svelte";
+  import { toasts } from "$lib/utils/toast";
+  import { theme } from "$lib/types/theme";
 
   const navLinks = [
     { href: "/", label: "Upload", icon: Upload },
     { href: "/statistics", label: "Statistics", icon: BarChart3 },
     { href: "/history", label: "History", icon: Clock },
+    { href: "/monitor", label: "Monitor", icon: Radio },
   ];
 </script>
 
@@ -17,7 +18,7 @@
   style="background:var(--bg);color:var(--text)"
 >
   <nav
-    class="h-14 px-5 flex items-center gap-1 sticky top-0 z-50"
+    class="h-14 px-5 flex items-center gap-1 sticky top-0 z-50 select-none"
     style="background:var(--surface);border-bottom:1px solid var(--border);backdrop-filter:blur(8px)"
   >
     <a href="/" class="flex items-center mr-4 shrink-0 group">
@@ -33,9 +34,9 @@
     {#each navLinks as link (link.href)}
       <a
         href={link.href}
-        class="nav-link {$page.url.pathname === link.href ||
-        ($page.url.pathname.startsWith(link.href) && link.href !== '/')
-          ? 'active'
+        class="nav-link font-mono uppercase tracking-wider text-[10px] flex items-center gap-1.5 px-3 py-1.5 transition-all rounded-none
+        {$page.url.pathname === link.href || ($page.url.pathname.startsWith(link.href) && link.href !== '/')
+          ? 'active border-b-2 border-[#FF8C7A] !bg-transparent !shadow-none'
           : ''}"
       >
         <svelte:component this={link.icon} size={13} />
@@ -47,7 +48,10 @@
 
     <a
       href="/settings"
-      class="nav-link {$page.url.pathname === '/settings' ? 'active' : ''}"
+      class="nav-link font-mono uppercase tracking-wider text-[10px] flex items-center gap-1.5 px-3 py-1.5 transition-all rounded-none
+      {$page.url.pathname === '/settings' 
+        ? 'active border-b-2 border-[#FF8C7A] !bg-transparent !shadow-none' 
+        : ''}"
     >
       <Settings size={13} />
       Settings
@@ -56,23 +60,21 @@
 
   <main class="flex-1"><slot /></main>
 
-  <!-- Toasts -->
+  <!-- Static High-Density Dark-Mode Only Toasts -->
   <div
     class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"
   >
     {#each $toasts as t (t.id)}
       <div
-        class="pointer-events-auto px-4 py-3 rounded-xl text-xs font-medium shadow-2xl
-        flex items-center gap-3 min-w-[240px] max-w-xs animate-fade-up"
+        class="pointer-events-auto px-4 py-3 rounded-none text-xs font-mono uppercase tracking-wider shadow-2xl
+        flex items-center gap-3 min-w-[240px] max-w-xs animate-fade-up border"
         style={t.type === "success"
-          ? "background:#0a2318;border:1px solid #166534;color:#86efac"
+          ? "background:#0a2318;border-color:#166534;color:#86efac"
           : t.type === "error"
-            ? "background:#2a0a0a;border:1px solid #991b1b;color:#fca5a5"
-            : "background:var(--surface-2);border:1px solid var(--border);color:var(--muted)"}
+            ? "background:#2a0a0a;border-color:#991b1b;color:#fca5a5"
+            : "background:#111117;border-color:#27272f;color:#a0a0a7"}
       >
-        <span
-          >{t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}</span
-        >
+        <span>{t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}</span>
         {t.message}
       </div>
     {/each}

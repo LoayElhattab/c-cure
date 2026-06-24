@@ -1,261 +1,278 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
+  import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
+  import { FolderOpen, Radio, Square, XCircle } from "lucide-svelte";
   import {
-    FolderOpen,
-    RefreshCw,
-    Trash2,
-    AlertTriangle,
-    CheckCircle,
-  } from "lucide-svelte";
+    success as toastSuccess,
+    error as toastError,
+    info as toastInfo,
+  } from "$lib/utils/toast";
 
-  let projects: any[] = [];
-  let loading = true;
-  let error = "";
-  let checkResults: Record<number, any> = {};
-  let checking: Record<number, boolean> = {};
-  let refreshing: Record<number, boolean> = {};
+  type MonitoredFolder = {
+    id: number;
+    name: string;
+    path: string;
+    registeredAt: string;
+    active: boolean;
+  };
 
-  onMount(async () => {
-    await loadProjects();
+  let monitoredFolders = $state<MonitoredFolder[]>([]);
+  let loading = $state(true);
+  let actionPath = $state<string | null>(null);
+  let error = $state("");
+
+  const hasMonitoredPaths = $derived(monitoredFolders.length > 0);
+
+  onMount(() => {
+    void loadMonitoredPaths();
+
+    // Listen to background monitor scan events
+    const unlistenStart = listen<{ path: string }>(
+      "monitor-scan-start",
+      (event) => {
+        toastInfo(
+          `File change detected: Scanning ${folderName(event.payload.path)}...`,
+        );
+      },
+    );
+    const unlistenSuccess = listen<{
+      path: string;
+      vuln_count: number;
+      total_functions: number;
+    }>("monitor-scan-success", (event) => {
+      if (event.payload.vuln_count > 0) {
+        toastError(
+          `Scan complete: Found ${event.payload.vuln_count} vulnerabilities in ${folderName(event.payload.path)}.`,
+        );
+      } else {
+        toastSuccess(
+          `Scan complete: No vulnerabilities found in ${folderName(event.payload.path)}.`,
+        );
+      }
+    });
+    const unlistenError = listen<{ path: string; error: string }>(
+      "monitor-scan-error",
+      (event) => {
+        toastError(
+          `Scan failed for ${folderName(event.payload.path)}: ${event.payload.error}`,
+        );
+      },
+    );
+
+    return () => {
+      unlistenStart.then((fn) => fn());
+      unlistenSuccess.then((fn) => fn());
+      unlistenError.then((fn) => fn());
+    };
   });
 
-  async function loadProjects() {
-    loading = true;
-    try {
-      projects = await invoke<any[]>("monitor_list");
-    } catch (err) {
-      error = `Failed to load projects: ${err}`;
-    }
-    loading = false;
+  function folderName(path: string): string {
+    const normalizedPath = path.replace(/\\/g, "/");
+    const parts = normalizedPath.split("/").filter(Boolean);
+    return parts.at(-1) ?? path;
   }
 
-  async function handleRegister() {
+  function formatPath(path: string): string {
+    return path.replace(/\\/g, "/");
+  }
+
+  function errorMessage(err: unknown): string {
+    if (err instanceof Error) {
+      return err.message;
+    }
+
+    return String(err);
+  }
+
+  async function loadMonitoredPaths(): Promise<void> {
+    loading = true;
+    error = "";
+
     try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
+      const dbProjects = await invoke<
+        {
+          id: number;
+          name: string;
+          folder_path: string;
+          registered_at: string;
+        }[]
+      >("monitor_list");
+      const activePaths = await invoke<string[]>("get_monitored_paths");
+
+      const activeSet = new Set(
+        activePaths.map((p) => formatPath(p).toLowerCase()),
+      );
+
+      monitoredFolders = dbProjects.map((project) => ({
+        id: project.id,
+        name: project.name,
+        path: project.folder_path,
+        registeredAt: project.registered_at,
+        active: activeSet.has(formatPath(project.folder_path).toLowerCase()),
+      }));
+    } catch (err) {
+      error = `Failed to load monitored folders: ${errorMessage(err)}`;
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function handleAddFolder(): Promise<void> {
+    error = "";
+
+    try {
       const folder = await open({ directory: true, multiple: false });
-      if (!folder) return;
-      const result = await invoke<any>("monitor_register", {
-        folderPath: folder as string,
-      });
-      if (result.error) {
-        error = result.error;
+
+      if (typeof folder !== "string") {
         return;
       }
-      await loadProjects();
+
+      actionPath = folder;
+      await invoke("start_monitoring", { path: folder });
+      await loadMonitoredPaths();
     } catch (err) {
-      error = `Failed to register project: ${err}`;
+      error = `Failed to start monitoring: ${errorMessage(err)}`;
+    } finally {
+      actionPath = null;
     }
   }
 
-  async function handleCheck(projectId: number) {
-    checking[projectId] = true;
-    checking = checking;
-    try {
-      checkResults[projectId] = await invoke<any>("monitor_check", { projectId });
-      checkResults = checkResults;
-    } catch (err) {
-      error = `Failed to check changes: ${err}`;
-    }
-    checking[projectId] = false;
-    checking = checking;
-  }
+  async function handleStop(path: string): Promise<void> {
+    error = "";
+    actionPath = path;
 
-  async function handleRefresh(projectId: number) {
-    refreshing[projectId] = true;
-    refreshing = refreshing;
     try {
-      await invoke<any>("monitor_refresh", { projectId });
-      delete checkResults[projectId];
-      checkResults = checkResults;
+      await invoke("stop_monitoring", { path });
+      await loadMonitoredPaths();
     } catch (err) {
-      error = `Failed to refresh: ${err}`;
-    }
-    refreshing[projectId] = false;
-    refreshing = refreshing;
-  }
-
-  async function handleRemove(projectId: number) {
-    try {
-      await invoke<any>("monitor_remove", { projectId });
-      delete checkResults[projectId];
-      await loadProjects();
-    } catch (err) {
-      error = `Failed to remove: ${err}`;
+      error = `Failed to stop monitoring: ${errorMessage(err)}`;
+    } finally {
+      actionPath = null;
     }
   }
 </script>
 
 <div
-  class="min-h-screen px-6 py-8"
+  class="hud-typography min-h-screen px-6 py-8"
   style="background:var(--bg);color:var(--text)"
 >
-  <div class="max-w-4xl mx-auto">
-    <div class="flex items-center justify-between mb-6">
+  <div class="mx-auto max-w-6xl">
+    <div
+      class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+    >
       <div>
-        <h1 class="text-lg font-semibold">File Monitor</h1>
-        <p class="text-xs mt-0.5" style="color:var(--muted)">
-          Hash-based change detection for C++ projects
+        <h1>Automated File Monitoring</h1>
+        <p class="page-kicker mt-1" style="color:var(--muted)">
+          Background scanning for registered C/C++ project folders.
         </p>
       </div>
+
       <button
-        on:click={handleRegister}
-        class="flex items-center gap-2 px-3 h-8 rounded-lg text-xs font-medium gradient-bg"
-        style="color:#fff"
+        onclick={handleAddFolder}
+        disabled={actionPath !== null}
+        class="btn-primary"
       >
-        <FolderOpen size={13} />
-        Watch Folder
+        <FolderOpen size={14} />
+        Add Folder to Watch
       </button>
     </div>
 
     {#if error}
-      <p class="text-xs mb-4" style="color:var(--danger)">{error}</p>
+      <div
+        class="mb-4 flex items-center gap-2 rounded-lg px-4 py-3 text-xs"
+        style="background:var(--danger-dim);border:1px solid rgba(239,68,68,0.24);color:var(--danger)"
+      >
+        <XCircle size={14} />
+        {error}
+      </div>
     {/if}
 
     {#if loading}
-      <div class="space-y-3">
-        {#each Array(2) as _}
+      <div class="grid gap-3 md:grid-cols-2">
+        {#each Array(4) as _}
           <div class="card p-5">
-            <div class="skeleton h-4 w-32 mb-2"></div>
-            <div class="skeleton h-3 w-64"></div>
+            <div class="skeleton mb-3 h-4 w-36"></div>
+            <div class="skeleton h-3 w-full max-w-72"></div>
           </div>
         {/each}
       </div>
-    {:else if projects.length === 0}
-      <div class="text-center mt-24">
-        <p class="text-3xl mb-3">👁</p>
+    {:else if !hasMonitoredPaths}
+      <div class="mt-24 text-center">
+        <div
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full"
+          style="background:var(--surface-2);border:1px solid var(--border);color:var(--muted)"
+        >
+          <Radio size={20} />
+        </div>
         <p class="text-sm" style="color:var(--muted)">
-          No folders being watched yet.
+          No folders are being watched.
         </p>
-        <p class="text-xs mt-1" style="color:var(--subtle)">
-          Click "Watch Folder" to start monitoring.
+        <p class="mt-1 text-xs" style="color:var(--subtle)">
+          Add a project folder to enable automatic re-scans on save.
         </p>
       </div>
     {:else}
-      <div class="space-y-3">
-        {#each projects as project}
+      <div class="grid gap-3 md:grid-cols-2">
+        {#each monitoredFolders as folder (folder.id)}
           <div class="card p-5">
-            <div class="flex items-start justify-between mb-4">
-              <div>
-                <p class="text-sm font-medium">{project.name}</p>
-                <p class="text-xs mt-0.5 mono" style="color:var(--muted)">
-                  {project.folder_path}
-                </p>
-                <p class="text-xs mt-0.5" style="color:var(--subtle)">
-                  Registered: {project.registered_at}
+            <div class="mb-4 flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="mb-2 flex items-center gap-2">
+                  {#if folder.active}
+                    <span class="relative flex h-3 w-3">
+                      <span
+                        class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
+                        style="background:#22c55e"
+                      ></span>
+                      <span
+                        class="relative inline-flex h-3 w-3 rounded-full"
+                        style="background:#22c55e"
+                      ></span>
+                    </span>
+                  {:else}
+                    <span class="relative flex h-3 w-3">
+                      <span
+                        class="relative inline-flex h-3 w-3 rounded-full"
+                        style="background:var(--border)"
+                      ></span>
+                    </span>
+                  {/if}
+                  <p class="text-sm font-bold">{folder.name}</p>
+                </div>
+                <p class="mono break-all text-xs" style="color:var(--muted)">
+                  {formatPath(folder.path)}
                 </p>
               </div>
-              <div class="flex items-center gap-2">
-                <button
-                  on:click={() => handleCheck(project.id)}
-                  disabled={checking[project.id]}
-                  class="flex items-center gap-1.5 px-3 h-7 rounded-lg text-xs transition-colors disabled:opacity-50"
-                  style="border:1px solid var(--border);color:var(--muted)"
-                >
-                  <AlertTriangle size={11} />
-                  {checking[project.id] ? "Checking..." : "Check Changes"}
-                </button>
-                <button
-                  on:click={() => handleRefresh(project.id)}
-                  disabled={refreshing[project.id]}
-                  class="flex items-center gap-1.5 px-3 h-7 rounded-lg text-xs transition-colors disabled:opacity-50"
-                  style="border:1px solid var(--border);color:var(--muted)"
-                >
-                  <RefreshCw size={11} />
-                  {refreshing[project.id] ? "Updating..." : "Update Baseline"}
-                </button>
-                <button
-                  on:click={() => handleRemove(project.id)}
-                  class="flex items-center gap-1.5 px-3 h-7 rounded-lg text-xs transition-colors"
-                  style="border:1px solid var(--border);color:var(--subtle)"
-                >
-                  <Trash2 size={11} />
-                </button>
-              </div>
+
+              <button
+                onclick={() => handleStop(folder.path)}
+                disabled={actionPath === folder.path}
+                class="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs transition-colors disabled:opacity-50"
+                style="border:1px solid var(--border);color:var(--muted)"
+              >
+                <Square size={11} />
+                {actionPath === folder.path ? "Stopping..." : "Stop"}
+              </button>
             </div>
 
-            {#if checkResults[project.id]}
-              {@const result = checkResults[project.id]}
-              {#if result.total_changes === 0 && result.deleted.length === 0}
-                <div
-                  class="flex items-center gap-2 rounded-xl px-4 py-3 text-xs"
-                  style="background:var(--success-dim);border:1px solid rgba(34,197,94,0.2);color:var(--success)"
-                >
-                  <CheckCircle size={13} />
-                  No changes detected since last baseline.
-                </div>
-              {:else}
-                <div class="space-y-3">
-                  {#if result.changed.length > 0}
-                    <div>
-                      <p
-                        class="text-xs font-semibold uppercase tracking-wider mb-2"
-                        style="color:#f97316"
-                      >
-                        Modified ({result.changed.length})
-                      </p>
-                      {#each result.changed as file}
-                        <div
-                          class="flex items-center justify-between px-3 py-2 rounded-lg mb-1 text-xs mono"
-                          style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);color:#fed7aa"
-                        >
-                          <span
-                            >{file.replace(/\\/g, "/").split("/").pop()}</span
-                          >
-                          <a
-                            href="/analyzing"
-                            class="text-xs"
-                            style="color:var(--accent)"
-                            on:click|preventDefault={async () => {
-                              const { pendingAnalysis } = await import(
-                                "$lib/store"
-                              );
-                              pendingAnalysis.set({ type: "file", path: file });
-                              window.location.href = "/analyzing";
-                            }}>Re-analyze →</a
-                          >
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                  {#if result.added.length > 0}
-                    <div>
-                      <p
-                        class="text-xs font-semibold uppercase tracking-wider mb-2"
-                        style="color:var(--accent)"
-                      >
-                        New ({result.added.length})
-                      </p>
-                      {#each result.added as file}
-                        <div
-                          class="px-3 py-2 rounded-lg mb-1 text-xs mono"
-                          style="background:var(--surface-2);border:1px solid var(--border);color:var(--muted)"
-                        >
-                          {file.replace(/\\/g, "/").split("/").pop()}
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                  {#if result.deleted.length > 0}
-                    <div>
-                      <p
-                        class="text-xs font-semibold uppercase tracking-wider mb-2"
-                        style="color:var(--danger)"
-                      >
-                        Deleted ({result.deleted.length})
-                      </p>
-                      {#each result.deleted as file}
-                        <div
-                          class="px-3 py-2 rounded-lg mb-1 text-xs mono"
-                          style="background:var(--danger-dim);border:1px solid rgba(239,68,68,0.2);color:#fca5a5"
-                        >
-                          {file.replace(/\\/g, "/").split("/").pop()}
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                </div>
-              {/if}
+            {#if folder.active}
+              <div
+                class="flex items-center justify-between rounded-lg px-3 py-2 text-xs"
+                style="background:var(--success-dim);border:1px solid rgba(34,197,94,0.18);color:var(--success)"
+              >
+                <span>Watching...</span>
+                <span style="color:var(--muted)">.c .cpp .h .hpp .cc .cxx</span>
+              </div>
+            {:else}
+              <div
+                class="flex items-center justify-between rounded-lg px-3 py-2 text-xs"
+                style="background:var(--danger-dim);border:1px solid rgba(239,68,68,0.18);color:var(--danger)"
+              >
+                <span>Offline / Directory Missing</span>
+                <span style="color:var(--muted)">Not Monitored</span>
+              </div>
             {/if}
           </div>
         {/each}

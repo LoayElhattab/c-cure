@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
+default-run = "c-cure-demo"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -22,12 +23,14 @@ cc = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
 open = "5.3.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # Database
-rusqlite = { version = "0.31", features = ["bundled"] }
+duckdb = { version = "1", features = ["bundled"] }
+async-duckdb = "0.3"
 
 # AST Parsing
 tree-sitter = "0.22"
@@ -36,9 +39,13 @@ tree-sitter-cpp = "0.22"
 # Networking (for Kaggle ML API)
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 tokio = { version = "1", features = ["full"] }
+notify = "6"
 
-# PDF Generation
-genpdf = "0.2"
+# PDF Generation (Typst)
+typst = "0.14"
+typst-pdf = "0.14"
+typst-assets = { version = "0.14", features = ["fonts"] }
+typst-as-lib = "0.15"
 
 # Utilities
 regex = "1"
@@ -47,6 +54,7 @@ md-5 = "0.10"
 chrono = "0.4"
 thiserror = "1"
 dirs = "5"
+anyhow = "1.0.102"
 
 [profile.dev]
 debug = false

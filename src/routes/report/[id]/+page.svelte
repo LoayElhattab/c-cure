@@ -2,63 +2,34 @@
   import { page } from "$app/stores";
   import { onMount } from "svelte";
   import { Download, ArrowRight, History } from "lucide-svelte";
-  import { fetchReport, flattenFunctions, exportPDF } from "./logic";
-  import {
-    getSeverityBorderColor,
-    getSeverityGlow,
-    getCVSSColor,
-  } from "$lib/cwe_db";
+  import ExportReportModal from "$lib/components/ExportReportModal.svelte";
+  import { fetchAnalysisSummary } from "./logic";
+  let report = $state<any>(null);
+  let error = $state("");
+  let loading = $state(true);
+  let mounted = $state(false);
+  let exportModalOpen = $state(false);
 
-  let report: any = null;
-  let error = "";
-  let loading = true;
-  let allFunctions: any[] = [];
-  let mounted = false;
+  let totalFunctions = $derived(report?.total_functions ?? 0);
+  let vulnerableFunctions = $derived(report?.vulnerable_functions ?? 0);
+  let cleanFunctions = $derived(report?.clean_functions ?? 0);
+  let totalFiles = $derived(report?.total_files ?? 0);
+  let vulnPct = $derived(
+    totalFunctions > 0
+      ? Math.round((vulnerableFunctions / totalFunctions) * 100)
+      : 0,
+  );
+  let isFolder = $derived(totalFiles > 1);
 
-  $: vulnFns = allFunctions.filter((f) => f.verdict === "vulnerable");
-  $: safeFns = allFunctions.filter((f) => f.verdict !== "vulnerable");
-  $: vulnPct =
-    allFunctions.length > 0
-      ? Math.round((vulnFns.length / allFunctions.length) * 100)
-      : 0;
-  $: isFolder = (report?.files?.length ?? 0) > 1;
-  $: filesAffectedCount = [...new Set(vulnFns.map((f) => f.file_path))].length;
+  let severityCounts = $derived({
+    Critical: report?.severity_breakdown?.Critical ?? 0,
+    High: report?.severity_breakdown?.High ?? 0,
+    Medium: report?.severity_breakdown?.Medium ?? 0,
+    Low: report?.severity_breakdown?.Low ?? 0,
+  });
+  let maxSevCount = $derived(Math.max(...Object.values(severityCounts), 1));
+  let cweFrequency = $derived(report?.top_vulnerabilities ?? []);
 
-  $: severityCounts = {
-    Critical: vulnFns.filter((f) => f.severity === "Critical").length,
-    High: vulnFns.filter((f) => f.severity === "High").length,
-    Medium: vulnFns.filter((f) => f.severity === "Medium").length,
-    Low: vulnFns.filter((f) => f.severity === "Low").length,
-  };
-  $: maxSevCount = Math.max(...Object.values(severityCounts), 1);
-
-  $: cweFrequency = (() => {
-    const counts: Record<
-      string,
-      { cwe: string; cwe_name: string; severity: string; count: number }
-    > = {};
-    vulnFns.forEach((f) => {
-      if (!f.cwe) return;
-      if (!counts[f.cwe])
-        counts[f.cwe] = {
-          cwe: f.cwe,
-          cwe_name: f.cwe_name ?? "",
-          severity: f.severity ?? "",
-          count: 0,
-        };
-      counts[f.cwe].count++;
-    });
-    return Object.values(counts)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
-  })();
-
-  const severityOrder: Record<string, number> = {
-    Critical: 0,
-    High: 1,
-    Medium: 2,
-    Low: 3,
-  };
   const SEVERITY_COLORS: Record<string, string> = {
     Critical: "#ef4444",
     High: "#f97316",
@@ -66,54 +37,52 @@
     Low: "#3b82f6",
   };
 
-  $: topFindings = [...vulnFns]
-    .sort(
-      (a, b) =>
-        (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4),
-    )
-    .slice(0, 6);
+  let topFindings = $derived(report?.most_critical_findings ?? []);
 
   const RING_R = 56;
   const RING_C = 2 * Math.PI * RING_R;
-  $: ringColor =
+  let ringColor = $derived(
     vulnPct === 0
       ? "var(--success)"
       : vulnPct < 25
         ? "#eab308"
         : vulnPct < 60
           ? "#f97316"
-          : "var(--danger)";
-  $: ringOffset = mounted ? RING_C * (1 - vulnPct / 100) : RING_C;
+          : "var(--danger)",
+  );
+  let ringOffset = $derived(mounted ? RING_C * (1 - vulnPct / 100) : RING_C);
 
   onMount(async () => {
+    loading = true;
     try {
-      const data = await fetchReport($page.params.id ?? "0");
+      const data = await fetchAnalysisSummary($page.params.id ?? "0");
       report = data;
-      allFunctions = flattenFunctions(data);
     } catch (e: any) {
-      error = e.message;
+      console.error("Failed to load analysis summary", e);
+      error = e.message ?? String(e);
+    } finally {
+      loading = false;
     }
-    loading = false;
     setTimeout(() => (mounted = true), 80);
   });
 </script>
 
 {#if loading}
-  <div class="min-h-screen" style="background:var(--bg);color:var(--text)">
+  <div class="hud-typography min-h-screen" style="background:var(--bg);color:var(--text)">
     <!-- Header skeleton -->
     <header
       class="h-14 flex items-center justify-between px-6 sticky top-0 z-10"
       style="background:var(--surface);border-bottom:1px solid var(--border)"
     >
       <div class="flex items-center gap-3">
-        <div class="skeleton h-6 w-16 rounded-lg"></div>
+        <div class="skeleton h-6 w-16 rounded-none"></div>
         <div class="skeleton h-3 w-1 rounded"></div>
         <div class="skeleton h-4 w-36 rounded"></div>
         <div class="skeleton h-3 w-28 rounded hidden sm:block"></div>
       </div>
       <div class="flex items-center gap-2">
-        <div class="skeleton h-7 w-24 rounded-lg"></div>
-        <div class="skeleton h-7 w-28 rounded-lg"></div>
+        <div class="skeleton h-7 w-24 rounded-none"></div>
+        <div class="skeleton h-7 w-28 rounded-none"></div>
       </div>
     </header>
 
@@ -122,7 +91,7 @@
       <div class="flex items-center gap-8">
         <!-- Ring -->
         <div
-          class="skeleton rounded-full shrink-0"
+          class="skeleton rounded-none shrink-0"
           style="width:132px;height:132px"
         ></div>
         <!-- KPI cards -->
@@ -146,11 +115,11 @@
               <div class="flex items-center gap-3">
                 <div class="skeleton h-3 w-14 rounded shrink-0"></div>
                 <div
-                  class="flex-1 h-1.5 rounded-full overflow-hidden"
+                  class="flex-1 h-1.5 rounded-none overflow-hidden"
                   style="background:var(--border)"
                 >
                   <div
-                    class="h-full rounded-full skeleton"
+                    class="h-full rounded-none skeleton"
                     style="width:{w}%"
                   ></div>
                 </div>
@@ -165,7 +134,7 @@
           <div class="space-y-5">
             {#each Array(3) as _, i}
               <div class="flex items-start gap-3">
-                <div class="skeleton w-5 h-5 rounded-lg shrink-0"></div>
+                <div class="skeleton w-5 h-5 rounded-none shrink-0"></div>
                 <div class="flex-1">
                   <div class="flex items-center gap-2 mb-1.5">
                     <div class="skeleton h-3 w-16 rounded"></div>
@@ -191,7 +160,7 @@
             style="border-bottom:{i < 3 ? '1px solid var(--border)' : 'none'}"
           >
             <div
-              class="skeleton w-1.5 rounded-full shrink-0"
+              class="skeleton w-1.5 rounded-none shrink-0"
               style="height:36px"
             ></div>
             <div class="flex-1">
@@ -209,14 +178,14 @@
 
       <!-- CTA button area -->
       <div class="flex flex-col items-center gap-3 pb-4">
-        <div class="skeleton h-10 w-44 rounded-xl"></div>
+        <div class="skeleton h-10 w-44 rounded-none"></div>
         <div class="skeleton h-2.5 w-56 rounded"></div>
       </div>
     </div>
   </div>
 {:else if error}
   <div
-    class="min-h-screen flex items-center justify-center"
+    class="hud-typography min-h-screen flex items-center justify-center"
     style="background:var(--bg)"
   >
     <div class="text-center">
@@ -227,7 +196,7 @@
     </div>
   </div>
 {:else}
-  <div class="min-h-screen" style="background:var(--bg);color:var(--text)">
+  <div class="hud-typography min-h-screen" style="background:var(--bg);color:var(--text)">
     <header
       class="h-14 flex items-center justify-between px-6 sticky top-0 z-10"
       style="background:var(--surface);border-bottom:1px solid var(--border)"
@@ -237,12 +206,12 @@
           ><History size={12} />History</a
         >
         <span style="color:var(--border)">·</span>
-        <h1
-          class="text-sm font-semibold mono truncate"
+        <p
+          class="text-sm font-bold mono truncate"
           style="color:var(--accent)"
         >
           {report.project_name}
-        </h1>
+        </p>
         <span
           class="text-xs shrink-0 hidden sm:block"
           style="color:var(--muted)">{report.timestamp}</span
@@ -250,10 +219,11 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         <button
-          onclick={() => exportPDF($page.params.id ?? "0")}
-          class="btn-ghost"
+          type="button"
+          onclick={() => (exportModalOpen = true)}
+          class="btn-primary"
         >
-          <Download size={12} />Export PDF
+          <Download size={12} />Export Report
         </button>
         <a href="/report/{$page.params.id}/detail" class="btn-primary">
           Full Report <ArrowRight size={12} />
@@ -318,10 +288,10 @@
         </div>
 
         <div class="flex-1 grid grid-cols-4 gap-3">
-          {#each [{ label: "Functions Scanned", value: allFunctions.length, color: "var(--text)" }, { label: "Vulnerable", value: vulnFns.length, color: "var(--danger)" }, { label: "Clean", value: safeFns.length, color: "var(--success)" }, { label: isFolder ? "Files Affected" : "Vulnerability Rate", value: isFolder ? `${filesAffectedCount} / ${report.files.length}` : `${vulnPct}%`, color: vulnPct > 50 ? "var(--danger)" : vulnPct > 0 ? "#f97316" : "var(--success)" }] as kpi, i}
+          {#each [{ label: "Functions Scanned", value: totalFunctions, color: "var(--text)" }, { label: "Vulnerable", value: vulnerableFunctions, color: "var(--danger)" }, { label: "Clean", value: cleanFunctions, color: "var(--success)" }, { label: isFolder ? "Files Scanned" : "Vulnerability Rate", value: isFolder ? totalFiles : `${vulnPct}%`, color: vulnPct > 50 ? "var(--danger)" : vulnPct > 0 ? "#f97316" : "var(--success)" }] as kpi, i}
             <div class="card p-4 animate-fade-up stagger-{i + 1}">
-              <p
-                class="text-xs uppercase tracking-wider mb-1.5"
+            <p
+                class="section-label mb-1.5"
                 style="color:var(--muted)"
               >
                 {kpi.label}
@@ -341,12 +311,12 @@
       <div class="grid grid-cols-2 gap-4 animate-fade-up stagger-2">
         <div class="card p-5">
           <p
-            class="text-xs font-semibold uppercase tracking-wider mb-4"
+            class="section-label mb-4"
             style="color:var(--muted)"
           >
             Severity Breakdown
           </p>
-          {#if vulnFns.length === 0}
+          {#if vulnerableFunctions === 0}
             <div
               class="flex items-center gap-2 py-6"
               style="color:var(--success)"
@@ -367,11 +337,11 @@
                     style="color:{col}">{sev}</span
                   >
                   <div
-                    class="flex-1 h-1.5 rounded-full overflow-hidden"
+                    class="flex-1 h-1.5 rounded-none overflow-hidden"
                     style="background:var(--border)"
                   >
                     <div
-                      class="h-full rounded-full"
+                      class="h-full rounded-none"
                       style="width:{mounted
                         ? Math.round((count / maxSevCount) * 100)
                         : 0}%;
@@ -393,7 +363,7 @@
 
         <div class="card p-5">
           <p
-            class="text-xs font-semibold uppercase tracking-wider mb-4"
+            class="section-label mb-4"
             style="color:var(--muted)"
           >
             Top Vulnerabilities
@@ -409,7 +379,7 @@
                   SEVERITY_COLORS[item.severity] ?? "var(--muted)"}
                 <div class="flex items-start gap-3">
                   <div
-                    class="w-5 h-5 rounded-lg flex items-center justify-center shrink-0 font-bold tabular-nums"
+                    class="w-5 h-5 rounded-none flex items-center justify-center shrink-0 font-bold tabular-nums"
                     style="background:{color}18;color:{color};font-size:10px"
                   >
                     {i + 1}
@@ -450,7 +420,7 @@
         <div class="card overflow-hidden animate-fade-up stagger-3">
           <div class="px-5 py-3" style="border-bottom:1px solid var(--border)">
             <p
-              class="text-xs font-semibold uppercase tracking-wider"
+              class="section-label"
               style="color:var(--muted)"
             >
               Most Critical Findings
@@ -468,7 +438,7 @@
                 : 'none'}"
             >
               <div
-                class="w-1.5 h-9 rounded-full shrink-0"
+                class="w-1.5 h-9 rounded-none shrink-0"
                 style="background:{color}"
               ></div>
               <div class="flex-1 min-w-0">
@@ -504,7 +474,7 @@
       <div class="text-center pb-4 animate-fade-up stagger-4">
         <a
           href="/report/{$page.params.id}/detail"
-          class="btn-primary inline-flex gap-2 rounded-xl"
+          class="btn-primary inline-flex gap-2 rounded-none"
           style="padding:10px 24px;font-size:13px;height:auto;box-shadow:0 0 24px var(--accent-glow)"
         >
           View Full Report
@@ -512,6 +482,12 @@
         </a>
       </div>
     </div>
+
+    <ExportReportModal
+      analysisId={$page.params.id ?? "0"}
+      open={exportModalOpen}
+      onClose={() => (exportModalOpen = false)}
+    />
   </div>
 {/if}
 

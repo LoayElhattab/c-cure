@@ -1,5 +1,5 @@
 import { goto } from "$app/navigation";
-import { pendingAnalysis } from "$lib/store";
+import { pendingAnalysis } from "$lib/stores/store";
 
 export let selectedPath: string | null = null;
 export let selectedName: string = "";

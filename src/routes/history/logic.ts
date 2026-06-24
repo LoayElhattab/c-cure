@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { success, error as errorToast } from "$lib/toast";
+import { success, error as errorToast } from "$lib/utils/toast";
 
 export async function loadHistory(): Promise<any[]> {
     try {

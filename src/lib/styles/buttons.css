@@ -8,7 +8,7 @@
     background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
     color: #fff;
     border: none;
-    border-radius: 8px;
+    border-radius: 0px;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
@@ -33,7 +33,7 @@
     background: transparent;
     color: var(--muted);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0px;
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
@@ -61,7 +61,7 @@
     border: 1px solid var(--accent);
     font-size: 15px;
     background: transparent;
-    border-radius: 9999px;
+    border-radius: 0px;
     font-weight: 600;
     color: var(--accent);
     box-shadow: 0 0 0 2px var(--accent);
@@ -95,7 +95,7 @@
     width: 20px;
     height: 20px;
     background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
-    border-radius: 50%;
+    border-radius: 0px;
     opacity: 0;
     transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
 }
@@ -110,7 +110,7 @@
 .animated-button:hover {
     box-shadow: 0 0 0 12px transparent;
     color: #212121;
-    border-radius: 9999px;
+    border-radius: 0px;
     border-color: transparent;
 }
 

@@ -31,7 +31,7 @@
 </script>
 
 <div
-  class="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden"
+  class="min-h-screen flex flex-col font-mono items-center justify-center px-6 relative overflow-hidden"
   style="background:var(--bg)"
 >
   <div class="absolute inset-0 pointer-events-none bg-grid"></div>

@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { theme } from "$lib/theme";
+    import { theme } from "$lib/types/theme";
     import { Sun, Moon, Wifi } from "lucide-svelte";
     import { loadSettings, saveSettings } from "./logic";
 
@@ -26,13 +26,13 @@
 </script>
 
 <div
-    class="min-h-screen px-6 py-8 animate-fade-up"
+    class="hud-typography min-h-screen px-6 py-8 animate-fade-up"
     style="background:var(--bg);color:var(--text)"
 >
     <div class="max-w-xl mx-auto">
         <div class="mb-6">
-            <h1 class="text-lg font-semibold">Settings</h1>
-            <p class="text-xs mt-0.5" style="color:var(--muted)">
+            <h1>Settings</h1>
+            <p class="page-kicker mt-1" style="color:var(--muted)">
                 Configure C-Cure preferences
             </p>
         </div>
@@ -52,7 +52,7 @@
             <!-- Appearance -->
             <div class="card p-5 mb-3">
                 <p
-                    class="text-xs font-semibold uppercase tracking-wider mb-1"
+                    class="section-label mb-1"
                     style="color:var(--muted)"
                 >
                     Appearance
@@ -78,13 +78,13 @@
             <!-- Kaggle API -->
             <div class="card p-5 mb-3">
                 <p
-                    class="text-xs font-semibold uppercase tracking-wider mb-1"
+                    class="section-label mb-1"
                     style="color:var(--muted)"
                 >
-                    Kaggle API
+                    Inference Service URL
                 </p>
                 <p class="text-xs mb-4" style="color:var(--subtle)">
-                    Paste your ngrok URL from the running Kaggle notebook.
+                    Paste your inference service URL.
                 </p>
                 <div class="flex gap-2">
                     <div
@@ -95,7 +95,7 @@
                         <input
                             type="text"
                             bind:value={kaggleUrl}
-                            placeholder="https://xxxx.ngrok-free.app"
+                            placeholder="https://your-inference-endpoint.com"
                             class="flex-1 bg-transparent py-2.5 text-xs outline-none mono"
                             style="color:var(--text)"
                         />
@@ -113,13 +113,13 @@
             <!-- About -->
             <div class="card p-5">
                 <p
-                    class="text-xs font-semibold uppercase tracking-wider mb-1"
+                    class="section-label mb-1"
                     style="color:var(--muted)"
                 >
                     About
                 </p>
                 <p class="text-xs" style="color:var(--subtle)">
-                    C-Cure · v1.0.0 · Demo · FCIS Graduation Project 2026
+                    C-Cure · v1.1.0 · FCIS Graduation Project 2026
                     <br />
                     Under supervision of Dr. Alshaimaa Abo-Alian & T.A. Alaa Prince
                 </p>
