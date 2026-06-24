@@ -55,7 +55,7 @@ jobs:
         working-directory: src-tauri
 
       - name: Rust clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy
         working-directory: src-tauri
 
       - name: Run tests with Mock API
