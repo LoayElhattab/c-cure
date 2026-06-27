@@ -55,13 +55,13 @@ Whether you're auditing a single file or continuously monitoring an entire codeb
 
 The entry point presents a clean HUD-style interface over a WebGL-powered terminal background. Users choose between scanning a single C/C++ source file or recursively scanning an entire project folder. Supported extensions: `.c`, `.cpp`, `.h`, `.cc`, `.cxx` for manual scans; the monitor also watches `.hpp`.
 
-![Upload Screen](assets/screenshots/upload-screen.png)
+![Upload Screen](static/screenshots/upload-screen.png)
 
 ### Real-Time Analysis Progress
 
 Once a target is selected, the analyzing screen displays a five-step progress pipeline: reading source, extracting functions via tree-sitter, connecting to the inference API, running triage and classification, and generating the report. Each step is visually tracked with completion indicators.
 
-![Analyzing Screen](assets/screenshots/analyzing-screen.png)
+![Analyzing Screen](static/screenshots/analyzing-screen.png)
 
 ### Granular Function Extraction
 
@@ -83,13 +83,13 @@ The statistics page provides a dense, data-rich view of aggregate security postu
 - **Temporal Vulnerability Forensics** — Line chart tracking vulnerability rate and security health over time.
 - **Recent Analysis Operations** — Table of latest scans with project name, timestamp, function count, and threat status.
 
-![Statistics Screen](assets/screenshots/statistics-screen.png)
+![Statistics Screen](static/screenshots/statistics-screen.png)
 
 ### Analysis History
 
 All scans are persisted locally in DuckDB. The history page lists every past analysis with project name, date, total functions scanned, and vulnerable count. Each row links to its report and can be deleted with inline confirmation. A search bar filters the list by project name.
 
-![History Screen](assets/screenshots/history-screen.png)
+![History Screen](static/screenshots/history-screen.png)
 
 ### Report Summary
 
@@ -101,7 +101,7 @@ Every analysis generates a summary report showing:
 - **Top Vulnerabilities** — Ranked list of most frequent CWEs with hit counts.
 - **Most Critical Findings** — The highest-severity vulnerable functions with file paths, line ranges, and direct links to the full report.
 
-![Summary Report Screen](assets/screenshots/summary-report-screen.png)
+![Summary Report Screen](static/screenshots/summary-report-screen.png)
 
 ### Detailed Report with Code Review
 
@@ -115,13 +115,13 @@ The full report page provides paginated, searchable, filterable access to every 
 - **CWE Enrichment** — Expanding a vulnerable function reveals its CWE name, CVSS score, CVSS vector, attack scenario, mitigations, and OWASP ASVS compliance badge.
 - **Copy to Clipboard** — One-click copy for any function's source code.
 
-![Detailed Report Screen](assets/screenshots/detailed-report-screen.png)
+![Detailed Report Screen](static/screenshots/detailed-report-screen.png)
 
 ### Real-Time File Monitoring
 
 The monitor page registers project folders for background watching. A recursive `notify` watcher tracks all supported source files. When a file is created or modified, a 500ms debounce triggers a content hash comparison. If the content changed, the file is re-analyzed automatically. Native OS notifications fire for Critical and High severity findings. Each watched folder displays its active status and supported extension list.
 
-![Monitor Screen](assets/screenshots/monitor-screen.png)
+![Monitor Screen](static/screenshots/monitor-screen.png)
 
 ### Multi-Format Export
 
@@ -136,11 +136,11 @@ An export modal attached to every report supports four output formats:
 
 The modal includes a native save dialog for choosing the destination path and displays live export progress via Tauri events.
 
-![Export Screen](assets/screenshots/export-screen.png)
+![Export Screen](static/screenshots/export-screen.png)
 
-### DuckDB Persistence with SQLite Migration
+### DuckDB Persistence
 
-All analysis data is stored in a local DuckDB database (`ccure.db`) in the Tauri app data directory. On first run, the system detects legacy SQLite databases and automatically migrates them to DuckDB schema with sequence resets and data preservation. The database supports high-throughput bulk inserts via the DuckDB Appender API.
+All analysis data and monitored projects are stored in a local DuckDB database (`ccure.db`) in the Tauri app data directory. The database supports high-throughput bulk inserts via the DuckDB Appender API.
 
 ---
 
