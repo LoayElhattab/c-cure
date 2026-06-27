@@ -35,3 +35,5 @@ AGENTS.md
 .cursor
 
 .codex-cargo-check
+
+src-tauri/src/bin/

@@ -1,69 +1,267 @@
-# C-Cure: LLM-Based C/C++ Vulnerability Scanner
+# C-Cure
 
-[![Rust Backend](https://img.shields.io/badge/Backend-Rust-orange.svg)](https://www.rust-lang.org/)
-[![Tauri Framework](https://img.shields.io/badge/Framework-Tauri_v2-blue.svg)](https://tauri.app/)
-[![Svelte Frontend](https://img.shields.io/badge/Frontend-Svelte_5-ff3e00.svg)](https://svelte.dev/)
-[![DuckDB Storage](https://img.shields.io/badge/Storage-DuckDB-fff000.svg)](https://duckdb.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <img src="static/logo-white.png#gh-dark-mode-only" width="600" alt="C-Cure Logo">
+  <img src="static/logo-black.png#gh-light-mode-only" width="600" alt="C-Cure Logo">
+</p>
+
+<p align="center">
+  <strong>LLM-Powered C/C++ Vulnerability Scanner</strong><br>
+  <em>Static analysis meets intelligent inference for modern secure development.</em>
+</p>
+
+<p align="center">
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Backend-Rust_2021-000000?logo=rust&logoColor=white" alt="Rust Backend"></a>
+  <a href="https://tauri.app/"><img src="https://img.shields.io/badge/Shell-Tauri_v2-24C8D8?logo=tauri&logoColor=white" alt="Tauri v2"></a>
+  <a href="https://svelte.dev/"><img src="https://img.shields.io/badge/Frontend-Svelte_5-FF3E00?logo=svelte&logoColor=white" alt="Svelte 5"></a>
+  <a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/Styling-Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind CSS"></a>
+  <a href="https://duckdb.org/"><img src="https://img.shields.io/badge/Persistence-DuckDB-FFF000?logo=duckdb&logoColor=black" alt="DuckDB"></a>
+  <a href="https://typst.app/"><img src="https.shields.io/badge/Reports-Typst-239DAD?logo=typst&logoColor=white" alt="Typst"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+</p>
+
+---
 
 ## Overview
 
-**C-Cure** is a desktop application designed to streamline the identification of security vulnerabilities in C and C++ source code. By combining native AST parsing, asynchronous Rust orchestration, and external ML inference, C-Cure enables developers, security researchers, and students to detect critical flaws such as out-of-bounds access, integer overflow, double free, and null pointer dereference before they reach production.
+**C-Cure** is a high-performance desktop security scanner that identifies vulnerabilities in C and C++ source code through a hybrid pipeline of **tree-sitter AST parsing** and **remote LLM inference**. Built as a Tauri v2 application with a Rust backend and a Svelte 5 frontend, it delivers professional-grade static analysis with real-time monitoring, interactive dashboards, and multi-format export capabilities.
 
-Built on the **Tauri v2** framework with a high-performance **Rust backend**, C-Cure provides a lightweight, responsive, and cross-platform desktop experience with local analytical storage powered by **DuckDB**.
+Whether you're auditing a single file or continuously monitoring an entire codebase, C-Cure maps findings to standard CWE classifications, enriches them with CVSS scoring and ASVS compliance mappings, and generates executive or technical reports on demand.
 
 ---
 
 ## Table of Contents
 
 - [Key Features](#key-features)
-- [Application Architecture](#application-architecture)
+- [Architecture](#architecture)
+  - [Component Architecture](#component-architecture)
+  - [File/Folder Analysis Pipeline](#filefolder-analysis-pipeline)
+  - [Real-Time Monitor Pipeline](#real-time-monitor-pipeline)
+- [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
-- [Methodology & Workflow](#methodology--workflow)
 - [Vulnerability Coverage](#vulnerability-coverage)
-- [Prerequisites](#prerequisites)
-- [Installation & Usage](#installation--usage)
-- [Unit Testing](#unit-testing)
-- [Contact](#contact)
+- [Workflow](#workflow)
+  - [Manual Analysis](#manual-analysis)
+  - [Continuous Monitoring](#continuous-monitoring)
+- [Installation & Development](#installation--development)
+- [Testing](#testing)
+- [License](#license)
 
 ---
 
 ## Key Features
 
-### Smart Static Analysis
-C-Cure uses specialized AST (Abstract Syntax Tree) parsing to break down C and C++ files into logical functions. This allows for granular security analysis of code blocks, improving accuracy and reducing noise compared to traditional line-by-line scanners.
+### Upload & Target Selection
 
-### Optimized Report Navigation
-Large analyses are stored in DuckDB and loaded through paginated report endpoints. The full report view fetches only the current slice of function rows, keeping navigation responsive even when a project contains a very large number of extracted functions.
+The entry point presents a clean HUD-style interface over a WebGL-powered terminal background. Users choose between scanning a single C/C++ source file or recursively scanning an entire project folder. Supported extensions: `.c`, `.cpp`, `.h`, `.cc`, `.cxx` for manual scans; the monitor also watches `.hpp`.
+
+![Upload Screen](assets/screenshots/upload-screen.png)
+
+### Real-Time Analysis Progress
+
+Once a target is selected, the analyzing screen displays a five-step progress pipeline: reading source, extracting functions via tree-sitter, connecting to the inference API, running triage and classification, and generating the report. Each step is visually tracked with completion indicators.
+
+![Analyzing Screen](assets/screenshots/analyzing-screen.png)
+
+### Granular Function Extraction
+
+The Rust backend uses tree-sitter to parse C++ ASTs and extract individual function definitions and template declarations. Source code is cleaned of comments and normalized before inference, preserving string literals while collapsing whitespace. This function-level granularity reduces noise compared to line-by-line scanners.
+
+### LLM-Powered Inference
+
+Extracted function bodies are dispatched to a configurable remote inference endpoint (Kaggle/NGROK) or a built-in mock provider. The dispatcher uses a Tokio semaphore to run up to 5 concurrent inference tasks per file. Results are mapped to CWE identifiers with confidence scores and severity ratings.
 
 ### Interactive Security Dashboard
-Monitor your project's security posture in real-time. The built-in dashboard provides visual metrics on total analyses, scanned files, vulnerable functions, severity distributions, CWE frequency, file-level safe/vulnerable ratios, and vulnerability trends over time.
 
-### Automated File Monitoring
-Dynamically update scan results with a proactive background agent using cross-platform file watching (`notify` crate). Automatically detects additions and modifications to C/C++ source and header files (`.c`, `.cpp`, `.h`, `.hpp`, `.cc`, `.cxx`) in registered directories, asynchronously debounces rapid IDE save events (500ms window) per file, triggers ML inference dynamically, and streams real-time status updates (start, success, error) to the UI via Tauri IPC event handlers—eliminating the need for manual re-scans. File content hashes are permanently stored in the local DuckDB database, ensuring that file state is persisted across application restarts to prevent redundant scans.
+The statistics page provides a dense, data-rich view of aggregate security posture across all analyses:
 
-### Severity-Based Alerting
-Raises instant native OS notifications (Windows Action Center, macOS Notification Center, Linux desktop notifications) whenever the background file monitor detects a **Critical** or **High** severity vulnerability. Alerts are dispatched via `tauri-plugin-notification` immediately after ML inference completes, without blocking the analysis thread. The notification body is dynamically formatted to surface the highest-severity CWE (e.g., *"Critical Out-of-bounds Write (CWE-787) detected in main.cpp"*). When multiple Critical/High findings are present in a single file, the count and the worst offender are reported together. Clean files and Low/Medium findings (CWE-190, CWE-369) are intentionally silent to prevent notification fatigue. Errors raised by the OS permission layer are logged but never crash the watcher.
+- **KPI Cards** — Composite risk score, security health percentage, vulnerability density, total analyses executed, and functions scanned.
+- **CWE Vulnerability Topology** — Horizontal bar chart ranking detected weakness types by frequency.
+- **Severity Distribution** — Doughnut chart with center metric showing total vulnerable functions, broken down by Critical, High, Medium, and Low.
+- **Security Dimension Analysis** — Radar chart assessing defensive posture across Input Validation, Memory Safety, Auth/Session, Crypto, Error Handling, and Logging.
+- **Attack Surface Ranking** — Per-file vulnerable/safe ratios for the top 10 most affected files, with a dropdown to drill into specific analyses.
+- **Temporal Vulnerability Forensics** — Line chart tracking vulnerability rate and security health over time.
+- **Recent Analysis Operations** — Table of latest scans with project name, timestamp, function count, and threat status.
 
-### Enterprise Export Reporting
-Export vulnerability assessment results through a unified export panel available from both summary and detailed report views. The workflow lets users choose Technical PDF, Executive PDF, SARIF 2.1.0, or CSV, pick the destination with a native save-file dialog filtered to the selected format, and receive progress and completion notifications while asynchronous background workers generate the report.
+![Statistics Screen](assets/screenshots/statistics-screen.png)
 
-### Premium User Experience
-Enjoy a modern, responsive interface built with Svelte 5 and Tailwind CSS. The app features optimized navigation, Chart.js visualizations, syntax-highlighted code views, searchable and filterable reports, and a unified dark-mode aesthetic for comfortable development.
+### Analysis History
+
+All scans are persisted locally in DuckDB. The history page lists every past analysis with project name, date, total functions scanned, and vulnerable count. Each row links to its report and can be deleted with inline confirmation. A search bar filters the list by project name.
+
+![History Screen](assets/screenshots/history-screen.png)
+
+### Report Summary
+
+Every analysis generates a summary report showing:
+
+- **Vulnerability Percentage Ring** — Visual indicator of vulnerable vs. total functions.
+- **KPI Cards** — Functions scanned, vulnerable count, clean count, and files scanned.
+- **Severity Breakdown** — Horizontal bars for Critical, High, Medium, and Low counts.
+- **Top Vulnerabilities** — Ranked list of most frequent CWEs with hit counts.
+- **Most Critical Findings** — The highest-severity vulnerable functions with file paths, line ranges, and direct links to the full report.
+
+![Summary Report Screen](assets/screenshots/summary-report-screen.png)
+
+### Detailed Report with Code Review
+
+The full report page provides paginated, searchable, filterable access to every function in the analysis:
+
+- **Search** — Filter by function name, CWE, CWE name, or file path.
+- **Verdict Filtering** — Toggle between All, Vulnerable, and Safe.
+- **Sorting** — Order by severity, function name, or line number.
+- **View Modes** — Flat function list or grouped by source file (auto-detected when the page spans multiple files).
+- **Code Display** — Syntax-highlighted C++ with line numbers, generated via highlight.js with theme-aware light/dark styles.
+- **CWE Enrichment** — Expanding a vulnerable function reveals its CWE name, CVSS score, CVSS vector, attack scenario, mitigations, and OWASP ASVS compliance badge.
+- **Copy to Clipboard** — One-click copy for any function's source code.
+
+![Detailed Report Screen](assets/screenshots/detailed-report-screen.png)
+
+### Real-Time File Monitoring
+
+The monitor page registers project folders for background watching. A recursive `notify` watcher tracks all supported source files. When a file is created or modified, a 500ms debounce triggers a content hash comparison. If the content changed, the file is re-analyzed automatically. Native OS notifications fire for Critical and High severity findings. Each watched folder displays its active status and supported extension list.
+
+![Monitor Screen](assets/screenshots/monitor-screen.png)
+
+### Multi-Format Export
+
+An export modal attached to every report supports four output formats:
+
+| Format | Description | Options |
+|--------|-------------|---------|
+| **PDF Technical** | Full detailed findings with function names, file paths, line ranges, CWE IDs, and optional fenced source code blocks. | Max findings (1–1000), include source code snippets |
+| **PDF Executive** | High-level summary with stat cards, severity breakdown, top vulnerability types, and top 10 most affected files. No code snippets. | Summary only |
+| **SARIF 2.1.0** | Standard static analysis interchange format with tool metadata, CWE-based rules, and per-result locations with code regions. | Full vulnerability details |
+| **CSV** | Spreadsheet-ready table with file path, function name, CWE, CWE name, severity, confidence, line numbers, and raw code. | RFC 4180 escaping |
+
+The modal includes a native save dialog for choosing the destination path and displays live export progress via Tauri events.
+
+![Export Screen](assets/screenshots/export-screen.png)
+
+### DuckDB Persistence with SQLite Migration
+
+All analysis data is stored in a local DuckDB database (`ccure.db`) in the Tauri app data directory. On first run, the system detects legacy SQLite databases and automatically migrates them to DuckDB schema with sequence resets and data preservation. The database supports high-throughput bulk inserts via the DuckDB Appender API.
 
 ---
 
-## Application Architecture
+## Architecture
 
-| Layer | Component | Description |
-|-------|-----------|-------------|
-| **Frontend** | SvelteKit + Svelte 5 + Tailwind | A reactive desktop UI managing analysis setup, dashboards, monitoring, settings, history, and paginated report views. |
-| **Shell** | Tauri v2 | Native application shell exposing secure IPC commands, file dialogs, path opening, and bundled desktop distribution. |
-| **Logic Engine** | Rust + Tokio | Asynchronous backend handling orchestration, file system watching, file system I/O, inference dispatch, report generation, and application state. |
-| **Parser** | Tree-sitter C++ | Industrial-grade parser for C/C++ function extraction, including templates, source ranges, and code normalization. |
-| **Inference Layer** | Reqwest + Kaggle/NGROK API | Configurable remote inference provider that classifies extracted snippets and maps model output to CWE metadata. |
-| **Persistence** | DuckDB + async-duckdb | Local analytical database for analyses, files, functions, watched projects, file hashes, statistics, pagination, and reporting pipelines. |
-| **Export Engine** | PDF, SARIF, CSV | Modular export system providing technical/executive PDF, SARIF 2.1.0, and CSV assessment results. |
+C-Cure is organized into four runtime layers. The **Presentation Layer** (SvelteKit) manages UI state, routing, and visualization. The **Application Layer** (Rust) handles parsing, orchestration, file watching, IPC commands, and native OS integrations. The **Inference Layer** is the remote model endpoint accessed via HTTP. The **Data Layer** persists all state in DuckDB.
+
+### Component Architecture
+
+```mermaid
+flowchart TB
+
+%% =========================
+%% Data Layer
+%% =========================
+subgraph Data["Data Layer"]
+direction LR
+Results["Local Results Store"]
+Projects["Monitored Projects Store"]
+end
+
+%% =========================
+%% Inference Layer
+%% =========================
+subgraph InferenceLayer["Inference Layer"]
+direction LR
+API["Inference API"]
+Triage["Triage Model"]
+Specialist["Specialist Model"]
+Registry["Model Registry"]
+end
+
+%% =========================
+%% Application Layer
+%% =========================
+subgraph Application["Application Layer"]
+direction LR
+Orchestrator["Analysis Orchestrator"]
+Inference["Inference Client"]
+Parser["File Parser"]
+MonitorService["Monitor Service"]
+Database["Database Manager"]
+end
+
+%% =========================
+%% Presentation Layer (now bottom)
+%% =========================
+subgraph Presentation["Presentation Layer"]
+direction LR
+Upload["Upload Screen"]
+Analyzing["Analyzing Screen"]
+Monitor["Monitor Screen"]
+Reports["Report Screens"]
+Statistics["Statistics Screen"]
+History["History Screen"]
+end
+```
+
+
+### File/Folder Analysis Pipeline
+
+```mermaid
+flowchart TD
+    U["User selects file or folder"] --> F["Svelte Upload Page"]
+    F --> P["pendingAnalysis store"]
+    P --> A["/analyzing route"]
+    A --> E["extract_functions IPC pre-check"]
+    A --> H["check_api IPC"]
+    A --> C{"Analysis type"}
+    C --> AF["analyze_file IPC"]
+    C --> AD["analyze_folder IPC"]
+    AF --> S["analysis_service"]
+    AD --> S
+    S --> T["tree-sitter parser"]
+    S --> I["InferenceProvider"]
+    I --> K["Kaggle HTTP API or MockProvider"]
+    S --> D["DuckDB repositories"]
+    D --> R["Report pages & Statistics"]
+    R --> X["Export Modal"]
+    X --> XP["PDF / SARIF / CSV exporters"]
+```
+
+### Real-Time Monitor Pipeline
+
+```mermaid
+flowchart TD
+    M["Monitor page"] --> SM["start_monitoring IPC"]
+    SM --> DB["watched_projects row"]
+    SM --> W["notify recursive watcher"]
+    W --> EV["create/modify/any event"]
+    EV --> FLT["supported source file filter"]
+    FLT --> DEB["500ms per-file debounce"]
+    DEB --> HASH["content hash comparison"]
+    HASH -->|unchanged| STOP["return silently"]
+    HASH -->|changed or new| UP["upsert file_hash"]
+    UP --> START["emit monitor-scan-start"]
+    START --> AS["analyze_file_service"]
+    AS --> OK{"success?"}
+    OK -->|yes| ALERT["native notification for Critical/High CWEs"]
+    ALERT --> SUC["emit monitor-scan-success"]
+    OK -->|no| ERR["emit monitor-scan-error"]
+    SUC --> UI["monitor toasts"]
+    ERR --> UI
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Frontend** | Svelte 5 + SvelteKit | Reactive UI, routing, SPA shell |
+| **Styling** | Tailwind CSS + CSS Variables | HUD-themed design system, dark/light mode |
+| **Visualization** | Chart.js + D3 | Dashboard charts, trend analysis, radar metrics |
+| **Desktop Shell** | Tauri v2 | Native window, IPC, OS notifications, file dialogs |
+| **Backend** | Rust 2021 + Tokio | Async command handlers, file I/O, concurrency |
+| **Parser** | tree-sitter (C++) | AST-based function extraction and source cleanup |
+| **Database** | DuckDB (async) | Analytical persistence, OLAP aggregations, appender bulk inserts |
+| **PDF Engine** | Typst | Native PDF generation with bundled fonts |
+| **HTTP Client** | reqwest | Remote inference communication with configurable TLS |
+| **Icons** | lucide-svelte | Consistent iconography across the HUD |
 
 ---
 
@@ -71,117 +269,150 @@ Enjoy a modern, responsive interface built with Svelte 5 and Tailwind CSS. The a
 
 ```text
 .
-|-- src/                         # Frontend Application (SvelteKit)
-|   |-- lib/                     # Shared library code ($lib)
-|   |   |-- components/          # Reusable Svelte components (UI, modals)
-|   |   |-- constants/           # CWE database and static data
-|   |   |-- stores/              # Svelte stores (analysis, app state)
-|   |   |-- styles/              # Global CSS and theme styles
-|   |   |-- types/               # TypeScript definitions (bindings, theme)
-|   |   `-- utils/               # Utility functions and toast manager
-|   `-- routes/                  # Application pages (Analyze, Statistics, Monitor, History, Reports, Settings)
-|-- src-tauri/                   # Native Backend (Rust + Tauri)
-|   |-- src/
-|   |   |-- commands.rs          # Tauri IPC command surface
-|   |   |-- parser.rs            # Tree-sitter function extraction and source normalization
-|   |   |-- monitor.rs           # Hash-based project monitoring
-|   |   |-- monitor_service.rs   # Automated file watching and debounced re-analysis
-|   |   |-- exports/             # Export modules (PDF, SARIF, CSV)
-|   |   |-- db/                  # DuckDB schema, migration, repositories, pagination, and statistics
-|   |   |-- inference/           # Kaggle provider, mock provider, settings, and async dispatcher
-|   |   `-- services/            # Analysis orchestration services
-|   |-- capabilities/            # Tauri permission capabilities
-|   |-- icons/                   # Application icons
-|   `-- Cargo.toml               # Backend dependency manifest
-|-- static/                      # Static frontend assets
-|-- test_project/                # Demo analysis target project
-|-- package.json                 # Frontend dependency manifest and scripts
-`-- README.md
+├── src/                          # SvelteKit Frontend
+│   ├── lib/
+│   │   ├── components/           # Shared Svelte components, ExportReportModal, UI primitives
+│   │   ├── data/
+│   │   │   └── cwe-reference.ts  # Static CWE, CVSS, scenario, and mitigation data
+│   │   ├── stores/               # pendingAnalysis, analysis flow, vulnerability count stores
+│   │   ├── styles/               # Theme CSS, component classes, buttons, backgrounds
+│   │   ├── types/                # TypeScript interfaces, theme store, IPC bindings
+│   │   └── utils/                # cn() helper, toast store
+│   └── routes/                   # Application pages
+│       ├── +page.svelte          # Upload / selection screen
+│       ├── analyzing/            # Analysis progress & orchestration
+│       ├── history/              # Past analysis history with search & delete
+│       ├── statistics/           # Security dashboard with Chart.js
+│       ├── monitor/              # Real-time folder monitoring
+│       ├── settings/             # Inference URL configuration & theme toggle
+│       └── report/[id]/         # Summary & detail report views
+├── src-tauri/                    # Rust Backend
+│   ├── src/
+│   │   ├── main.rs               # Tauri entrypoint
+│   │   ├── lib.rs                # AppState, module declarations
+│   │   ├── commands.rs           # Full Tauri IPC command surface
+│   │   ├── error.rs              # AppError variants & serialization
+│   │   ├── parser.rs             # tree-sitter C++ function extraction
+│   │   ├── db/                   # DuckDB schema, repositories, migrations
+│   │   │   ├── mod.rs            # Pool, schema, migration logic (SQLite -> DuckDB)
+│   │   │   ├── analysis_repo.rs  # Analysis CRUD, summaries, reports
+│   │   │   ├── stats_repo.rs     # Dashboard aggregations, KPIs, trends
+│   │   │   └── projects_repo.rs  # Watched projects & file hash tracking
+│   │   ├── inference/            # Inference abstraction layer
+│   │   │   ├── mod.rs            # Provider selection (Mock vs Kaggle)
+│   │   │   ├── provider.rs       # InferenceProvider trait
+│   │   │   ├── kaggle.rs         # HTTP inference provider
+│   │   │   ├── mock.rs           # Pattern-based mock provider
+│   │   │   ├── dispatcher.rs     # Concurrent Tokio dispatch (max 5)
+│   │   │   └── config.rs         # Settings persistence (config.json)
+│   │   ├── services/
+│   │   │   └── analysis_service.rs # Single-file & folder analysis orchestration
+│   │   ├── monitor_service.rs    # File watcher registry, debounce, alerts
+│   │   └── exports/              # Report generators
+│   │       ├── pdf.rs            # Typst-based technical & executive PDFs
+│   │       ├── sarif.rs          # SARIF 2.1.0 JSON export
+│   │       └── csv.rs            # CSV export with RFC 4180 escaping
+│   └── Cargo.toml                # Rust dependency manifest
+├── static/                       # Logos, favicon, framework SVGs, fonts
+├── package.json                  # Node scripts & frontend dependencies
+├── svelte.config.js              # Static adapter, SPA fallback
+├── vite.config.js                # Vite + SvelteKit, port 1420
+└── tailwind.config.ts            # Class-based dark mode, accent tokens
 ```
-
----
-
-## Methodology & Workflow
-
-1.  **Scanning**: The user selects a single source file or a project folder for analysis.
-2.  **Extraction**: The Rust backend uses `tree-sitter` to identify C/C++ function definitions, capture line ranges, and normalize function bodies before inference.
-3.  **Inference**: Extracted function snippets are dispatched asynchronously to the configured Kaggle/NGROK inference API with bounded concurrency. The provider classifies each block as **Safe** or **Vulnerable** and returns confidence data.
-4.  **Enrichment**: Vulnerable outputs are mapped to CWE names, default severities, CVSS-oriented frontend metadata, and remediation guidance.
-5.  **Persistence**: Analysis metadata, scanned files, function results, watched projects, and file hashes are stored locally in DuckDB. Legacy SQLite data is migrated automatically when detected.
-6.  **Reporting**: Summary screens load aggregate metrics, while detailed reports use optimized count and page endpoints. A single export workflow reads stored DuckDB results, opens a format-aware save dialog, and can generate Technical PDF, Executive PDF, SARIF 2.1.0, and RFC 4180-compliant CSV outputs on background workers.
 
 ---
 
 ## Vulnerability Coverage
 
-C-Cure maps code vulnerabilities to standard **Common Weakness Enumerations (CWE)** and enriches vulnerable findings with safety-critical taxonomy identifiers:
+C-Cure maps detected vulnerabilities to **Common Weakness Enumeration (CWE)** identifiers, enriches them with **CVSS** scores, and maps them to **OWASP ASVS** compliance requirements.
 
-| ID | Description | Default Severity | OWASP ASVS V4 | SEI CERT C/C++ | MISRA C++ |
-|----|-------------|------------------|---------------|----------------|-----------|
-| **CWE-125** | Out-of-bounds Read | High | ASVS 4.0.3 V5.4.1 | ARR30-C | MISRA C++:2008 Rule 5-0-16 |
-| **CWE-787** | Out-of-bounds Write | Critical | ASVS 4.0.3 V5.4.1 | ARR30-C | MISRA C++:2008 Rule 5-0-15 |
-| **CWE-190** | Integer Overflow or Wraparound | High | ASVS 4.0.3 V5.4.3 | INT32-C | MISRA C++:2008 Rule 5-0-6 |
-| **CWE-369** | Divide By Zero | Medium | ASVS 4.0.3 V5.1.4 | INT33-C | MISRA C++:2008 Rule 5-0-10 |
-| **CWE-415** | Double Free | High | ASVS 4.0.3 V5.4.1 | MEM30-C | MISRA C++:2008 Rule 18-4-1 |
-| **CWE-476** | NULL Pointer Dereference | High | ASVS 4.0.3 V5.4.1 | EXP34-C | MISRA C++:2008 Rule 4-10-1 |
-
----
-
-## Prerequisites
-
-- **Node.js**: Version 20+
-- **Rust**: Stable toolchain (via `rustup`)
-- **C++ Build Tools**: MSVC (Windows) or GCC/Clang (Linux/macOS) for native Rust dependencies.
-- **Inference Endpoint**: A valid Kaggle/NGROK URL configured in the app's settings.
+| ID | Name | CVSS | Severity | ASVS Mapping |
+|----|------|------|----------|--------------|
+| **CWE-787** | Out-of-bounds Write | 9.8 | 🔴 Critical | ASVS 4.0.3 V5.4.1 |
+| **CWE-89** | SQL Injection | 9.8 | 🔴 Critical | ASVS 4.0.3 V5.3.4 |
+| **CWE-125** | Out-of-bounds Read | 9.1 | 🔴 Critical | ASVS 4.0.3 V5.4.1 |
+| **CWE-190** | Integer Overflow or Wraparound | 8.6 | 🟠 High | ASVS 4.0.3 V5.4.3 |
+| **CWE-415** | Double Free | 8.1 | 🟠 High | ASVS 4.0.3 V5.4.1 |
+| **CWE-476** | NULL Pointer Dereference | 7.5 | 🟠 High | ASVS 4.0.3 V5.4.1 |
+| **CWE-369** | Divide By Zero | 7.5 | 🟠 High | ASVS 4.0.3 V5.1.4 |
+| **CWE-79** | Cross-Site Scripting | 6.1 | 🟡 Medium | ASVS 4.0.3 V5.3.3 |
 
 ---
 
-## Installation & Usage
+## Workflow
 
-1.  **Clone & Install**
-    ```bash
-    git clone https://github.com/LoayElHattab/C-Cure.git
-    cd C-Cure
-    npm install
-    ```
+### Manual Analysis
+1. **Select Target** — Choose a single C/C++ file (`c`, `cpp`, `h`, `cc`, `cxx`) or an entire project folder.
+2. **Pre-Flight Checks** — The frontend verifies function extraction and inference API reachability.
+3. **AST Extraction** — Rust backend uses tree-sitter to parse and slice every function definition and template.
+4. **Concurrent Inference** — Function bodies are dispatched to the remote LLM endpoint (or mock provider) with up to **5 parallel tasks**.
+5. **Persistence** — Results are bulk-saved to DuckDB with file metadata, CWE classifications, severity, and confidence scores.
+6. **Reporting** — Navigate to the interactive report for code review, or export to PDF/SARIF/CSV.
 
-2.  **Run Development Environment**
-    ```bash
-    npm run tauri dev
-    ```
-
-3.  **Run UI Only**
-    ```bash
-    npm run dev
-    ```
-
-4.  **Setup Inference**
-    Open the application, go to **Settings**, and enter your remote Inference API URL.
-
-5.  **Build Desktop Bundle**
-    ```bash
-    npm run tauri build
-    ```
+### Continuous Monitoring
+1. **Register Folder** — Add a project directory to the monitor registry.
+2. **Watch** — A recursive `notify` watcher tracks all supported source files.
+3. **Detect** — On file creation or modification, a **500ms debounce** triggers a content hash comparison.
+4. **Analyze** — If content changed, the file is re-analyzed automatically.
+5. **Alert** — Native OS notifications fire for **Critical** and **High** severity findings (CWE-787, CWE-89, CWE-125, CWE-415, CWE-476).
 
 ---
 
-## Unit Testing
+## Installation & Development
 
-Run the frontend type and Svelte checks:
+### Prerequisites
+- **Node.js** 20+
+- **Rust** stable toolchain (`rustup`)
+- **C++ Build Tools** — MSVC (Windows) or GCC/Clang (Linux/macOS) for tree-sitter bindings
+- **Inference Endpoint** — A valid remote API URL (Kaggle/NGROK) or set `MOCK_API=true`
 
+### 1. Clone & Install
 ```bash
-npm run check
+git clone https://github.com/LoayElHattab/C-Cure.git
+cd C-Cure
+npm install
 ```
 
-Run the Rust unit tests:
+### 2. Run Development Server
+```bash
+npm run tauri dev
+```
+The Tauri dev server opens on `http://localhost:1420` with HMR enabled.
 
+### 3. Build for Production
+```bash
+npm run build
+npm run tauri build
+```
+
+### 4. Configure Inference
+Open the app, navigate to **Settings**, and enter your remote inference API base URL.  
+For offline testing, set the environment variable:
+```bash
+MOCK_API=true npm run tauri dev
+```
+
+---
+
+## Testing
+
+### Rust Unit Tests
+Run backend tests with Cargo:
 ```bash
 cd src-tauri
 cargo test
 ```
 
+**Covered modules:**
+- `parser.rs` — Comment cleaning, string preservation, function & template extraction
+- `monitor_service.rs` — Source file filtering, case-insensitive extension matching
+- `exports/pdf.rs` — Typst code block handling, max findings truncation, file creation
+- `exports/csv.rs` — Quote, comma, and newline escaping
+
 ---
 
-## Contact
+## License
 
-For questions or collaboration inquiries, please open an issue in the project repository.
+This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
+
+---
