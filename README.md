@@ -403,18 +403,17 @@ This installs all frontend dependencies, including the local Tauri CLI used by t
 ```bash
 npm run tauri dev
 ```
-On the first launch, Cargo will download and compile all Rust dependencies. This may take several minutes depending on your machine. Subsequent builds are significantly faster due to incremental compilation.
+On the first launch, Cargo will download and compile all Rust dependencies. This may take 10-30 minutes depending on your machine. Subsequent builds are significantly faster due to incremental compilation.
 The frontend is served with Vite on `http://localhost:1420` with hot module replacement (HMR) enabled.
 
-### 4. Production build
+## Build (Production)
 
 ```bash
-npm run build
 npm run tauri build
 ```
-The production executable will be generated under:
+The generated installer can be found in:
 ```
-src-tauri/target/release/
+src-tauri/target/release/bundle/
 ```
 
 ### 5. Configure the inference provider
