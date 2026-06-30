@@ -361,33 +361,72 @@ C-Cure maps detected vulnerabilities to **Common Weakness Enumeration (CWE)** id
 ## Installation & Development
 
 ### Prerequisites
-- **Node.js** 20+
-- **Rust** stable toolchain (`rustup`)
-- **C++ Build Tools** — MSVC (Windows) or GCC/Clang (Linux/macOS) for tree-sitter bindings
-- **Inference Endpoint** — A valid remote API URL (Kaggle/NGROK) or set `MOCK_API=true`
 
-### 1. Clone & Install
+Before building C-Cure, ensure the following tools are installed:
+
+#### All Platforms
+- **Node.js 20+**
+- **Rust stable toolchain** (`rustup` + Cargo)
+
+#### Windows
+- **Visual Studio 2022** (Community or Build Tools)
+- **Desktop development with C++** workload
+- **Windows 10/11 SDK**
+
+#### Linux
+- GCC or Clang
+- WebKitGTK development packages (required by Tauri)
+- GTK3 development libraries
+
+#### macOS
+- Xcode Command Line Tools
+
+#### Inference
+- A running inference endpoint (Kaggle / ngrok / custom server), or use the built-in mock provider (`MOCK_API=true`).
+
+### 1. Clone the repository
+
 ```bash
 git clone https://github.com/LoayElHattab/C-Cure.git
 cd C-Cure
-npm install
 ```
 
-### 2. Run Development Server
+### 2. Install dependencies
+
+```bash
+npm install
+```
+This installs all frontend dependencies, including the local Tauri CLI used by the project.
+
+### 3. Run the application
+
 ```bash
 npm run tauri dev
 ```
-The Tauri dev server opens on `http://localhost:1420` with HMR enabled.
+On the first launch, Cargo will download and compile all Rust dependencies. This may take several minutes depending on your machine. Subsequent builds are significantly faster due to incremental compilation.
+The frontend is served with Vite on `http://localhost:1420` with hot module replacement (HMR) enabled.
 
-### 3. Build for Production
+### 4. Production build
+
 ```bash
 npm run build
 npm run tauri build
 ```
+The production executable will be generated under:
+```
+src-tauri/target/release/
+```
 
-### 4. Configure Inference
-Open the app, navigate to **Settings**, and enter your remote inference API base URL.  
-For offline testing, set the environment variable:
+### 5. Configure the inference provider
+
+After launching the application:
+
+1. Open **Settings**.
+2. Enter the base URL of your inference API.
+3. Save the configuration.
+
+For offline development, start the application with the mock provider:
+
 ```bash
 MOCK_API=true npm run tauri dev
 ```
