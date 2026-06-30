@@ -415,6 +415,7 @@ The generated installer can be found in:
 ```
 src-tauri/target/release/bundle/
 ```
+**Note:** The `src-tauri/target/` directory can occupy several gigabytes because it stores compiled dependencies, build artifacts, incremental compilation cache, and debugging information. This is expected. The actual distributables inside `bundle/` are much smaller (typically tens of MB).
 
 ### 5. Configure the inference provider
 
